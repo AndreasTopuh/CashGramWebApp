@@ -14,9 +14,10 @@ function getUserFromToken(request: NextRequest) {
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params
     const user = getUserFromToken(request)
     if (!user) {
       return NextResponse.json(
@@ -56,9 +57,10 @@ export async function DELETE(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const params = await context.params
     const user = getUserFromToken(request)
     if (!user) {
       return NextResponse.json(

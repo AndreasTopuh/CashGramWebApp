@@ -12,7 +12,47 @@ datasource db {
 
 model User {
   id        String   @id @default(cuid())
-  email     String   @unique
+  phone     String   @unique
+  password  String
   name      String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  expenses  Expense[]
+  
+  @@map("users")
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String   @default("#3B82F6") // Default blue color
+  icon      String   @default("💰")      // Default money icon
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  expenses  Expense[]
+  
+  @@map("categories")
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  amount      Float
+  description String?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Foreign Keys
+  userId      String
+  categoryId  String
+  
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  @@map("expenses")
 }

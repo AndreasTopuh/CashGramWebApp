@@ -510,6 +510,7 @@ export default function DashboardPage() {
             <h3 className="text-lg font-semibold">Pengeluaran Terbaru</h3>
             <p className="text-sm text-gray-600 mt-1">Riwayat transaksi pengeluaran Anda</p>
           </div>
+
           
           {!Array.isArray(expenses) || expenses.length === 0 ? (
             <div className="p-8 text-center text-gray-500">

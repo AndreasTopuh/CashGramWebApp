@@ -71,6 +71,15 @@ export async function POST(request: NextRequest) {
     const text = message.text
     const userId = message.from.id
 
+    // Handle non-text messages (voice, photo, video, etc.)
+    if (!text) {
+      return NextResponse.json({
+        method: 'sendMessage',
+        chat_id: chatId,
+        text: '📝 Maaf, saya hanya bisa memproses pesan teks.\n\nSilakan ketik pesan pengeluaran Anda, contoh:\n• "nasi goreng 20rb"\n• "ojek 15k atau Gunakan kalimat panjang yang terdiri dari bebrapa pengeluaran"\n\nAtau gunakan command /start untuk mulai.'
+      })
+    }
+
     console.log('Processing message:', { chatId, text, userId })
 
     // Handle /start command
@@ -84,7 +93,11 @@ export async function POST(request: NextRequest) {
 Ketik: /login [nomor_hp] [password]
 Contoh: /login 085717797*** password***
 
-💻 DASHBOARD WEBSITE:
+� MASALAH LOGIN?
+Ketik: /reset
+(Gunakan jika ada masalah re-login)
+
+�💻 DASHBOARD WEBSITE:
 Untuk melihat dashboard lengkap, silakan login ke:
 🌐 https://cash-gram-web-app.vercel.app/
 Gunakan nomor HP dan password yang sama seperti di bot.
@@ -217,6 +230,34 @@ Sekarang Anda bisa:
           method: 'sendMessage',
           chat_id: chatId,
           text: '❌ Terjadi kesalahan saat login. Coba lagi nanti.'
+        })
+      }
+    }
+
+    // Handle reset command (untuk clear telegram user mapping)
+    if (text === '/reset') {
+      try {
+        // Delete any existing telegram user mapping for this telegram ID
+        await prisma.telegramUser.deleteMany({
+          where: { telegramId: userId.toString() }
+        })
+        
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: `🔄 Reset berhasil! Data Telegram Anda sudah dihapus.
+
+Sekarang Anda bisa login ulang dengan:
+/login [nomor_hp] [password]
+
+Contoh: /login 085717797*** password***`
+        })
+      } catch (error) {
+        console.error('Reset error:', error)
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: '❌ Terjadi kesalahan saat reset. Coba lagi nanti.'
         })
       }
     }

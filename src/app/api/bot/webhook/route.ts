@@ -39,6 +39,7 @@ Setelah login, Anda bisa:
 💰 Input pengeluaran: "makan siang 25rb"
 📊 Analisis: /analisis minggu atau /analisis bulan
 📈 Info saldo: /saldo
+👋 Logout: /logout
 
 Selamat menggunakan CashGram! 🚀`
       })
@@ -239,6 +240,36 @@ ${todayExpenses.map(exp => `• ${exp.description}: Rp ${exp.amount.toLocaleStri
           method: 'sendMessage',
           chat_id: chatId,
           text: '❌ Gagal mengambil data saldo. Coba lagi nanti.'
+        })
+      }
+    }
+
+    // Handle logout command
+    if (text === '/logout') {
+      try {
+        // Deactivate user session
+        await prisma.telegramUser.update({
+          where: { telegramId: userId.toString() },
+          data: {
+            isActive: false,
+            updatedAt: new Date()
+          }
+        })
+
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: `👋 Anda telah logout dari CashGram Bot.
+
+Terima kasih telah menggunakan layanan kami!
+Ketik /start untuk login kembali.`
+        })
+      } catch (error) {
+        console.error('Logout error:', error)
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: '❌ Terjadi kesalahan saat logout. Coba lagi nanti.'
         })
       }
     }

@@ -219,24 +219,149 @@ Setelah menambahkan environment variables, klik **"Redeploy"** untuk menerapkan 
 
 ## 📱 Cara Menggunakan Aplikasi
 
-### 1. Registrasi
-- Buka aplikasi dan klik **"Daftar"**
-- Isi nama, nomor HP, dan password
-- Klik **"Daftar"** untuk membuat akun
+### 1. Registrasi Akun Baru
 
-### 2. Login
-- Gunakan nomor HP dan password yang telah didaftarkan
-- Klik **"Masuk"**
+#### Langkah-langkah Registrasi:
+1. **Akses Halaman Registrasi**
+   - Buka aplikasi di browser: `http://localhost:3000` (development) atau URL deployment Anda
+   - Klik tombol **"Daftar"** atau navigasi ke `/register`
 
-### 3. Dashboard
-- Lihat ringkasan pengeluaran bulanan
-- Grafik pengeluaran harian dan kategori
-- Daftar transaksi terbaru
+2. **Isi Form Registrasi**
+   - **Nama Lengkap**: Masukkan nama lengkap Anda
+   - **Nomor HP**: Gunakan format Indonesia (contoh: 081234567890)
+   - **Password**: Minimal 6 karakter, gunakan kombinasi huruf dan angka
+   - **Konfirmasi Password**: Ketik ulang password yang sama
 
-### 4. Tambah Pengeluaran
-- Klik **"Tambah Pengeluaran"**
-- Isi nominal, deskripsi, dan pilih kategori
-- Klik **"Simpan"**
+3. **Submit Registrasi**
+   - Klik tombol **"Daftar"**
+   - Sistem akan memvalidasi data dan membuat akun baru
+   - Jika berhasil, Anda akan diarahkan ke halaman login
+
+### 2. Login ke Aplikasi
+
+#### Cara Login:
+1. **Akses Halaman Login**
+   - Navigasi ke `/login` atau klik **"Masuk"** dari halaman utama
+
+2. **Masukkan Kredensial**
+   - **Nomor HP**: Gunakan nomor HP yang sama saat registrasi
+   - **Password**: Masukkan password Anda
+
+3. **Proses Login**
+   - Klik tombol **"Masuk"**
+   - Sistem akan memverifikasi kredensial
+   - Jika valid, Anda akan diarahkan ke dashboard
+
+### 3. Navigasi Dashboard
+
+#### Komponen Dashboard:
+1. **Header Navigation**
+   - Logo aplikasi CashGram di kiri atas
+   - Menu navigasi utama
+   - Tombol logout di kanan atas
+
+2. **Ringkasan Keuangan**
+   - **Total Pengeluaran Bulan Ini**: Menampilkan total spending bulan berjalan
+   - **Rata-rata Harian**: Kalkulasi pengeluaran rata-rata per hari
+   - **Jumlah Transaksi**: Total transaksi dalam bulan ini
+
+3. **Visualisasi Data**
+   - **Grafik Pengeluaran Harian**: Chart line menunjukkan tren pengeluaran
+   - **Grafik Kategori**: Pie chart pembagian pengeluaran per kategori
+   - **Grafik Bulanan**: Bar chart perbandingan pengeluaran bulanan
+
+4. **Daftar Transaksi Terbaru**
+   - 10 transaksi terakhir dengan detail lengkap
+   - Informasi: tanggal, deskripsi, kategori, dan nominal
+
+### 4. Mengelola Pengeluaran
+
+#### Menambah Pengeluaran Baru:
+1. **Akses Form Tambah Pengeluaran**
+   - Klik tombol **"+ Tambah Pengeluaran"** di dashboard
+   - Atau navigasi ke halaman expense management
+
+2. **Isi Detail Pengeluaran**
+   - **Nominal**: Masukkan jumlah uang (dalam Rupiah)
+   - **Deskripsi**: Keterangan transaksi (opsional tapi disarankan)
+   - **Kategori**: Pilih dari dropdown kategori yang tersedia
+   - **Tanggal**: Secara default hari ini, bisa diubah sesuai kebutuhan
+
+3. **Simpan Transaksi**
+   - Klik tombol **"Simpan"**
+   - Data akan tersimpan ke database
+   - Kembali ke dashboard dengan data terupdate
+
+#### Melihat Detail Pengeluaran:
+1. **Akses Daftar Lengkap**
+   - Klik **"Lihat Semua"** pada bagian transaksi terbaru
+   - Atau navigasi ke `/expenses`
+
+2. **Filter dan Pencarian**
+   - Filter berdasarkan tanggal (harian, mingguan, bulanan)
+   - Filter berdasarkan kategori
+   - Pencarian berdasarkan deskripsi
+
+3. **Aksi Transaksi**
+   - **Edit**: Ubah detail transaksi yang sudah ada
+   - **Hapus**: Menghapus transaksi (dengan konfirmasi)
+   - **Detail**: Melihat informasi lengkap transaksi
+
+### 5. Mengelola Kategori
+
+#### Kategori Default:
+Aplikasi menyediakan kategori default:
+- 🍔 **Makanan** (Hijau)
+- 🚗 **Transportasi** (Biru)
+- 🎬 **Hiburan** (Purple)
+- 🏥 **Kesehatan** (Merah)
+- 📚 **Pendidikan** (Orange)
+- 🏠 **Rumah Tangga** (Teal)
+
+#### Menambah Kategori Baru:
+1. **Akses Manajemen Kategori**
+   - Navigasi ke `/api/categories` (untuk admin)
+   - Atau hubungi administrator sistem
+
+2. **Data Kategori Baru**
+   - Nama kategori (unik)
+   - Icon emoji yang sesuai
+   - Warna kategori (hex code)
+
+### 6. Tips Penggunaan Optimal
+
+#### Best Practices:
+1. **Konsistensi Input**
+   - Catat pengeluaran secara real-time
+   - Gunakan deskripsi yang jelas dan konsisten
+   - Pilih kategori dengan tepat
+
+2. **Monitoring Rutin**
+   - Cek dashboard setiap hari
+   - Review grafik pengeluaran mingguan
+   - Analisis tren pengeluaran bulanan
+
+3. **Analisis Data**
+   - Gunakan grafik kategori untuk identifikasi area pengeluaran terbesar
+   - Monitor grafik harian untuk mendeteksi pola tidak normal
+   - Bandingkan data bulanan untuk melihat progress
+
+#### Keyboard Shortcuts:
+- `Ctrl + N`: Tambah pengeluaran baru (pada halaman dashboard)
+- `Ctrl + D`: Kembali ke dashboard
+- `Ctrl + L`: Logout
+
+### 7. Fitur Keamanan
+
+#### Proteksi Akun:
+- **Session Management**: Otomatis logout setelah periode tidak aktif
+- **JWT Authentication**: Token keamanan untuk setiap request
+- **Password Encryption**: Password di-hash menggunakan bcrypt
+
+#### Data Privacy:
+- Data personal tersimpan dengan enkripsi
+- Akses data dibatasi per user (tidak bisa melihat data user lain)
+- Backup otomatis ke Supabase dengan keamanan tingkat enterprise
 
 ## 🔧 Troubleshooting
 

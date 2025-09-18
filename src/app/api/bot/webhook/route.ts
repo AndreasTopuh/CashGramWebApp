@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GeminiService } from '@/lib/gemini'
 import jwt from 'jsonwebtoken'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import { formatPhoneNumber } from '@/lib/auth'
-
-const prisma = new PrismaClient()
 
 export async function POST(request: NextRequest) {
   try {

@@ -319,6 +319,14 @@ Contoh: /login 085717797*** password***`
           })
         }
         
+        if (error.status === 429 || error.message?.includes('quota')) {
+          return NextResponse.json({
+            method: 'sendMessage',
+            chat_id: chatId,
+            text: `🤖 AI sudah mencapai batas harian (50 requests).\n\n📊 Analisis masih tersedia dengan data dasar.\n💡 Gunakan /saldo untuk melihat pengeluaran hari ini.\n🌐 Dashboard lengkap: https://cash-gram-web-app.vercel.app/\n\n⏰ AI akan reset besok pagi.`
+          })
+        }
+        
         if (error.status === 429) {
           return NextResponse.json({
             method: 'sendMessage',

@@ -278,6 +278,57 @@ PENTING: Berikan HANYA JSON murni tanpa teks tambahan!
     }
   }
 
+  // Fallback analysis when AI quota is exceeded
+  static generateFallbackAnalysis(expenses: any[]): string {
+    if (!expenses || expenses.length === 0) {
+      return `## 📊 **Analisis Pengeluaran**
+
+### ❌ **Belum Ada Data**
+Belum ada pengeluaran untuk dianalisis.
+
+### 💡 **Mulai Catat**
+- Mulai catat pengeluaran harian
+- Gunakan format: "nasi goreng 20rb"
+- Cek hasil dengan /saldo
+
+### 💰 **Jangan Lupa**
+- **Menabung**: Sisihkan minimal 20% untuk tabungan
+- **Investasi**: Mulai investasi untuk masa depan yang lebih baik`
+    }
+
+    const totalSpending = expenses.reduce((sum, exp) => sum + exp.amount, 0)
+    const categoryStats = expenses.reduce((acc: any, exp) => {
+      const category = exp.category?.name || 'Lainnya'
+      acc[category] = (acc[category] || 0) + exp.amount
+      return acc
+    }, {})
+
+    const topCategory = Object.entries(categoryStats)
+      .sort(([,a]: any, [,b]: any) => b - a)[0]
+
+    const avgDaily = totalSpending / 7 // assuming weekly analysis
+    
+    return `## 📊 **Analisis Pengeluaran**
+
+### 💰 **Ringkasan**
+- **Total**: Rp ${totalSpending.toLocaleString('id-ID')}
+- **Transaksi**: ${expenses.length} kali
+- **Rata-rata**: Rp ${Math.round(avgDaily).toLocaleString('id-ID')} per hari
+
+### 🏆 **Kategori Teratas**
+${topCategory ? `${topCategory[0]} adalah yang tertinggi dengan Rp ${(topCategory[1] as number).toLocaleString('id-ID')}` : 'Belum ada kategori dominan'}
+
+### 💡 **Saran Sederhana**
+- Pantau pengeluaran harian secara rutin
+- Buat budget untuk kategori yang sering digunakan
+- Cari alternatif yang lebih hemat untuk pengeluaran besar
+
+### 💰 **Jangan Lupa**
+- **Menabung**: Sisihkan minimal 20% untuk tabungan  
+- **Investasi**: Mulai investasi untuk masa depan yang lebih baik
+- **Emergency Fund**: Siapkan dana darurat 3-6 bulan pengeluaran`
+  }
+
   // Generate spending analysis
   static async generateSpendingAnalysis(expenses: any[]): Promise<string> {
     try {
@@ -330,9 +381,17 @@ Gunakan bahasa santai dan mudah dipahami. Maksimal 350 kata.
         return await model.generateContent(prompt)
       })
       return result.response.text()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating analysis:', error)
-      return `## ❌ **Error**\nMaaf, terjadi kesalahan saat menganalisis data pengeluaran Anda.`
+      
+      // Check if it's quota exceeded error
+      if (error.status === 429 || error.message?.includes('quota') || error.message?.includes('429')) {
+        console.log('Quota exceeded, using fallback analysis')
+        return this.generateFallbackAnalysis(expenses)
+      }
+      
+      // For other errors, also use fallback
+      return this.generateFallbackAnalysis(expenses)
     }
   }
 
@@ -378,8 +437,61 @@ Gunakan bahasa santai dan mudah dipahami. Maksimal 200 kata.
         return await model.generateContent(prompt)
       })
       return result.response.text()
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating period analysis:', error)
+      
+      // Check if it's quota exceeded error
+      if (error.status === 429 || error.message?.includes('quota') || error.message?.includes('429')) {
+        console.log('Quota exceeded, using fallback period analysis')
+        const periodText = period === 'week' ? 'Minggu' : 'Bulan'
+        
+        if (!expenses || expenses.length === 0) {
+          return `## 📊 **Analisis ${periodText} Ini**
+
+### ❌ **Belum Ada Data**
+Belum ada pengeluaran untuk ${periodText.toLowerCase()} ini.
+
+### 💡 **Mulai Catat**
+- Catat pengeluaran harian dengan format: "nasi goreng 20rb"
+- Gunakan /saldo untuk cek total hari ini
+
+### 💰 **Jangan Lupa**
+- **Menabung**: Sisihkan minimal 20% untuk tabungan
+- **Investasi**: Mulai investasi untuk masa depan`
+        }
+        
+        const totalSpending = expenses.reduce((sum, exp) => sum + exp.amount, 0)
+        const avgDaily = totalSpending / (period === 'week' ? 7 : 30)
+        const categoryStats = expenses.reduce((acc: any, exp) => {
+          const category = exp.category?.name || 'Lainnya'
+          acc[category] = (acc[category] || 0) + exp.amount
+          return acc
+        }, {})
+        
+        const topCategory = Object.entries(categoryStats)
+          .sort(([,a]: any, [,b]: any) => b - a)[0]
+        
+        return `## 📊 **Analisis ${periodText} Ini**
+
+### 💰 **Ringkasan**
+- **Total**: Rp ${totalSpending.toLocaleString('id-ID')}
+- **Transaksi**: ${expenses.length} kali
+- **Rata-rata**: Rp ${Math.round(avgDaily).toLocaleString('id-ID')} per hari
+
+### 🏆 **Kategori Favorit**
+${topCategory ? `${topCategory[0]} adalah yang paling banyak dengan Rp ${(topCategory[1] as number).toLocaleString('id-ID')}` : 'Belum ada kategori dominan'}
+
+### 💡 **Saran Sederhana**
+- Pantau pengeluaran harian agar tetap terkontrol
+- Cari alternatif hemat untuk pengeluaran besar
+- Buat target pengeluaran untuk ${periodText.toLowerCase()} depan
+
+### 🏦 **Jangan Lupa**
+- **Menabung**: Sisihkan minimal 20% untuk tabungan
+- **Investasi**: Mulai investasi untuk masa depan`
+      }
+      
+      // For other errors, return simple error message
       const periodText = period === 'week' ? 'minggu ini' : 'bulan ini'
       return `## ❌ **Error**\nMaaf, terjadi kesalahan saat menganalisis pengeluaran ${periodText}.`
     }

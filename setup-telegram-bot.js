@@ -2,7 +2,7 @@
 // Run this script after deploying to Vercel to setup webhook
 
 const TELEGRAM_BOT_TOKEN = '8480487065:AAGBykabL6AmnS3XN3-ZFism6tHBx7qf-QQ'
-const WEBHOOK_URL = 'https://your-vercel-app.vercel.app/api/bot/webhook' // Replace with your Vercel URL
+const WEBHOOK_URL = 'https://cash-gram-web-app.vercel.app/api/bot/webhook' // Replace with your Vercel URL
 
 async function setupTelegramWebhook() {
   try {

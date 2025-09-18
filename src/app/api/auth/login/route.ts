@@ -54,6 +54,24 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Login error:', error)
+    
+    // Check if it's a Prisma error
+    if (error instanceof Error) {
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      })
+      
+      // Handle specific Prisma errors
+      if (error.message.includes('connection')) {
+        return NextResponse.json(
+          { error: 'Database connection failed' },
+          { status: 503 }
+        )
+      }
+    }
+    
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

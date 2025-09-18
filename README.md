@@ -269,7 +269,7 @@ Distributed under the MIT License. See `LICENSE` for more information.
 ## 📞 Support
 
 - **GitHub Issues**: [Report bugs](https://github.com/AndreasTopuh/CashGramWebApp/issues)
-- **Email**: support@cashgram.com
+- **Email**: figojen3@gmail.com
 - **Documentation**: [Wiki](https://github.com/AndreasTopuh/CashGramWebApp/wiki)
 
 ## 🌟 Acknowledgments

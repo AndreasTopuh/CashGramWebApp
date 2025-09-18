@@ -5,11 +5,11 @@ import { PrismaClient } from '@prisma/client'
 import { formatPhoneNumber } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
-  // Create a fresh Prisma client to avoid prepared statement conflicts
+  // Use direct connection (not pooled) to avoid prepared statement conflicts in serverless
   const prisma = new PrismaClient({
     datasources: {
       db: {
-        url: process.env.DATABASE_URL,
+        url: process.env.DIRECT_URL || process.env.DATABASE_URL,
       },
     },
   })

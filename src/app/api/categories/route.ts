@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { PrismaClient } from '@prisma/client'
 import jwt from 'jsonwebtoken'
 
 export async function GET(request: NextRequest) {
+  // Use fresh Prisma client to avoid prepared statement conflicts
+  const prisma = new PrismaClient({
+    datasources: {
+      db: {
+        url: process.env.DIRECT_URL || process.env.DATABASE_URL,
+      },
+    },
+  })
+
   try {
     const authorization = request.headers.get('authorization')
     if (!authorization?.startsWith('Bearer ')) {
@@ -24,10 +33,21 @@ export async function GET(request: NextRequest) {
       { error: 'Internal server error' },
       { status: 500 }
     )
+  } finally {
+    await prisma.$disconnect()
   }
 }
 
 export async function POST(request: NextRequest) {
+  // Use fresh Prisma client to avoid prepared statement conflicts
+  const prisma = new PrismaClient({
+    datasources: {
+      db: {
+        url: process.env.DIRECT_URL || process.env.DATABASE_URL,
+      },
+    },
+  })
+
   try {
     const authorization = request.headers.get('authorization')
     if (!authorization?.startsWith('Bearer ')) {
@@ -62,5 +82,7 @@ export async function POST(request: NextRequest) {
       { error: 'Internal server error' },
       { status: 500 }
     )
+  } finally {
+    await prisma.$disconnect()
   }
 }

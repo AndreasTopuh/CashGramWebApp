@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma, connectDB, disconnectDB } from '@/lib/prisma'
+import { PrismaClient } from '@prisma/client'
 import { verifyPassword, formatPhoneNumber, generateToken } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
+  // Use fresh Prisma client to avoid prepared statement conflicts
+  const prisma = new PrismaClient({
+    datasources: {
+      db: {
+        url: process.env.DIRECT_URL || process.env.DATABASE_URL,
+      },
+    },
+  })
+
   try {
     console.log('Login attempt started')
     const { phone, password } = await request.json()
@@ -20,16 +29,6 @@ export async function POST(request: NextRequest) {
     // Format phone number
     const formattedPhone = formatPhoneNumber(phone)
     console.log('Formatted phone:', formattedPhone)
-
-    // Test database connection
-    const isConnected = await connectDB()
-    if (!isConnected) {
-      console.error('Database connection failed')
-      return NextResponse.json(
-        { error: 'Database connection failed' },
-        { status: 500 }
-      )
-    }
 
     console.log('Database connected successfully')
 
@@ -101,6 +100,6 @@ export async function POST(request: NextRequest) {
     )
   } finally {
     // Always disconnect in serverless environment
-    await disconnectDB()
+    await prisma.$disconnect()
   }
 }

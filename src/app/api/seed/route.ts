@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { PrismaClient } from '@prisma/client'
 
 const defaultCategories = [
   { name: 'Makanan', icon: '🍔', color: '#EF4444' },
@@ -13,6 +13,15 @@ const defaultCategories = [
 ]
 
 export async function POST() {
+  // Use fresh Prisma client to avoid prepared statement conflicts
+  const prisma = new PrismaClient({
+    datasources: {
+      db: {
+        url: process.env.DIRECT_URL || process.env.DATABASE_URL,
+      },
+    },
+  })
+
   try {
     // Categories are now user-specific, not global
     // Default categories will be created when users first register
@@ -25,5 +34,7 @@ export async function POST() {
       { error: 'Internal server error' },
       { status: 500 }
     )
+  } finally {
+    await prisma.$disconnect()
   }
 }

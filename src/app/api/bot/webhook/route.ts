@@ -38,22 +38,22 @@ export async function POST(request: NextRequest) {
         chat_id: chatId,
         text: `🎉 Selamat datang di CashGram Bot!, Bot pencatatan dengan integrasi AI menggunakan GEMIN.
 
-🔐 **CARA LOGIN:**
+🔐 CARA LOGIN:
 Ketik: /login [nomor_hp] [password]
 Contoh: /login 085717797*** password***
 
-💻 **DASHBOARD WEBSITE:**
+💻 DASHBOARD WEBSITE:
 Untuk melihat dashboard lengkap, silakan login ke:
 🌐 https://cash-gram-web-app.vercel.app/
 Gunakan nomor HP dan password yang sama seperti di bot.
 
-🤖 **FUNGSI BOT YANG TERSEDIA:**
+🤖 FUNGSI BOT YANG TERSEDIA:
 • 💰 Input pengeluaran: "makan siang 25rb"
 • 📊 Analisis pengeluaran: /analisis minggu atau /analisis bulan
 • 📈 Cek saldo harian: /saldo
 • 👋 Logout dari bot: /logout
 
-📱 **KEUNGGULAN:**
+📱 KEUNGGULAN:
 ✅ Pencatatan otomatis dengan AI
 ✅ Analisis keuangan real-time
 ✅ Sinkronisasi dengan dashboard web

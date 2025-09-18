@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { PrismaClient } from '@prisma/client'
 import { verifyToken } from '@/lib/auth'
 
 function getUserFromToken(request: NextRequest) {
@@ -16,6 +16,15 @@ export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  // Use fresh Prisma client to avoid prepared statement conflicts
+  const prisma = new PrismaClient({
+    datasources: {
+      db: {
+        url: process.env.DIRECT_URL || process.env.DATABASE_URL,
+      },
+    },
+  })
+
   try {
     const params = await context.params
     const user = getUserFromToken(request)
@@ -52,6 +61,8 @@ export async function DELETE(
       { error: 'Internal server error' },
       { status: 500 }
     )
+  } finally {
+    await prisma.$disconnect()
   }
 }
 
@@ -59,6 +70,15 @@ export async function PUT(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  // Use fresh Prisma client to avoid prepared statement conflicts
+  const prisma = new PrismaClient({
+    datasources: {
+      db: {
+        url: process.env.DIRECT_URL || process.env.DATABASE_URL,
+      },
+    },
+  })
+
   try {
     const params = await context.params
     const user = getUserFromToken(request)
@@ -106,5 +126,7 @@ export async function PUT(
       { error: 'Internal server error' },
       { status: 500 }
     )
+  } finally {
+    await prisma.$disconnect()
   }
 }

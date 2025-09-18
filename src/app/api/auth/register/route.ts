@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { PrismaClient } from '@prisma/client'
 import { hashPassword, formatPhoneNumber, generateToken } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
+  // Use fresh Prisma client to avoid prepared statement conflicts
+  const prisma = new PrismaClient({
+    datasources: {
+      db: {
+        url: process.env.DIRECT_URL || process.env.DATABASE_URL,
+      },
+    },
+  })
+
   try {
     const { phone, password, name } = await request.json()
 
@@ -79,5 +88,8 @@ export async function POST(request: NextRequest) {
       { error: 'Internal server error' },
       { status: 500 }
     )
+  } finally {
+    // Always disconnect in serverless environment
+    await prisma.$disconnect()
   }
 }

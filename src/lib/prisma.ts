@@ -10,21 +10,30 @@ export const prisma = globalForPrisma.prisma ?? new PrismaClient({
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
-// Add connection handling for serverless
+// Handle connection lifecycle properly for serverless
+let isConnected = false
+
 export async function connectDB() {
   try {
-    await prisma.$connect()
+    if (!isConnected) {
+      await prisma.$connect()
+      isConnected = true
+    }
     return true
   } catch (error) {
     console.error('Database connection failed:', error)
+    isConnected = false
     return false
   }
 }
 
 export async function disconnectDB() {
   try {
-    await prisma.$disconnect()
+    if (isConnected) {
+      await prisma.$disconnect()
+      isConnected = false
+    }
   } catch (error) {
-    console.error('Database disconnect failed:', error)
+    console.error('Database disconnection failed:', error)
   }
 }

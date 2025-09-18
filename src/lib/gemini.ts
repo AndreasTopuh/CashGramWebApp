@@ -3,6 +3,31 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' })
 
+// Helper function for retry mechanism
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (error: any) {
+      if (attempt === maxRetries) throw error
+      
+      // Only retry on 503 (overloaded) or 429 (rate limit) errors
+      if (error.status === 503 || error.status === 429) {
+        const delay = baseDelay * Math.pow(2, attempt - 1) // Exponential backoff
+        console.log(`Gemini API retry attempt ${attempt}/${maxRetries} after ${delay}ms`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+      } else {
+        throw error
+      }
+    }
+  }
+  throw new Error('Max retries exceeded')
+}
+
 export interface ParsedExpense {
   amount: number
   description: string
@@ -38,7 +63,9 @@ Output: {"amount": 15000, "description": "ojek", "category": "Transportasi", "co
 Berikan hanya JSON tanpa penjelasan tambahan:
 `
 
-      const result = await model.generateContent(prompt)
+      const result = await retryWithBackoff(async () => {
+        return await model.generateContent(prompt)
+      })
       const response = result.response.text()
       
       // Clean the response to extract JSON
@@ -95,7 +122,9 @@ Rules:
 Return only valid JSON without markdown formatting.
 `
 
-      const result = await model.generateContent(prompt)
+      const result = await retryWithBackoff(async () => {
+        return await model.generateContent(prompt)
+      })
       const response = result.response.text().trim()
       
       // Clean response - remove markdown code blocks if present
@@ -169,7 +198,9 @@ Buat analisis dengan format MARKDOWN berikut:
 Gunakan bahasa santai dan mudah dipahami. Maksimal 350 kata.
 `
 
-      const result = await model.generateContent(prompt)
+      const result = await retryWithBackoff(async () => {
+        return await model.generateContent(prompt)
+      })
       return result.response.text()
     } catch (error) {
       console.error('Error generating analysis:', error)
@@ -215,7 +246,9 @@ Buat analisis dengan format MARKDOWN berikut:
 Gunakan bahasa santai dan mudah dipahami. Maksimal 200 kata.
 `
 
-      const result = await model.generateContent(prompt)
+      const result = await retryWithBackoff(async () => {
+        return await model.generateContent(prompt)
+      })
       return result.response.text()
     } catch (error) {
       console.error('Error generating period analysis:', error)

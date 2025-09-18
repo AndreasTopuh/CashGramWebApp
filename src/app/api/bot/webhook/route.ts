@@ -251,6 +251,14 @@ Sekarang Anda bisa:
           include: { category: true }
         })
 
+        if (expenses.length === 0) {
+          return NextResponse.json({
+            method: 'sendMessage',
+            chat_id: chatId,
+            text: `📊 Analisis ${period === 'week' ? 'Minggu' : 'Bulan'} Ini\n\n❌ Belum ada pengeluaran untuk dianalisis.\n\nMulai catat pengeluaran dengan format:\n"nasi goreng 20rb"`
+          })
+        }
+
         const analysis = await GeminiService.generatePeriodAnalysis(expenses, period)
         
         return NextResponse.json({
@@ -258,12 +266,30 @@ Sekarang Anda bisa:
           chat_id: chatId,
           text: stripMarkdown(analysis)
         })
-      } catch (error) {
+      } catch (error: any) {
         console.error('Analysis error:', error)
+        
+        // Handle specific Gemini API errors
+        if (error.status === 503) {
+          return NextResponse.json({
+            method: 'sendMessage',
+            chat_id: chatId,
+            text: `🤖 AI sedang sibuk saat ini.\n\n💡 Coba gunakan /saldo untuk melihat pengeluaran hari ini, atau tunggu beberapa menit dan coba /analisis lagi.`
+          })
+        }
+        
+        if (error.status === 429) {
+          return NextResponse.json({
+            method: 'sendMessage',
+            chat_id: chatId,
+            text: `⏳ Terlalu banyak permintaan.\n\nTunggu sebentar dan coba lagi dalam 1-2 menit.`
+          })
+        }
+        
         return NextResponse.json({
           method: 'sendMessage',
           chat_id: chatId,
-          text: '❌ Gagal menganalisis data. Coba lagi nanti.'
+          text: `❌ Gagal menganalisis data.\n\n💡 Alternatif: Gunakan /saldo untuk cek pengeluaran hari ini.`
         })
       }
     }

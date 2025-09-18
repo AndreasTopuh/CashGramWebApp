@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { GeminiService } from '@/lib/gemini'
 import jwt from 'jsonwebtoken'
 import { PrismaClient } from '@prisma/client'
+import { formatPhoneNumber } from '@/lib/auth'
 
 const prisma = new PrismaClient()
 
@@ -52,13 +53,16 @@ Selamat menggunakan CashGram! 🚀`
       const phone = parts[1]
       const password = parts[2]
 
+      // Format phone number properly
+      const formattedPhone = formatPhoneNumber(phone)
+
       try {
         // Authenticate user
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://cash-gram-web-app.vercel.app'
         const response = await fetch(`${baseUrl}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone, password })
+          body: JSON.stringify({ phone: formattedPhone, password })
         })
 
         if (response.ok) {

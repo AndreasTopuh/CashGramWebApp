@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GeminiService } from '@/lib/gemini'
 import jwt from 'jsonwebtoken'
-import { prisma } from '@/lib/prisma'
+import { PrismaClient } from '@prisma/client'
 import { formatPhoneNumber } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
+  // Create a fresh Prisma client to avoid prepared statement conflicts
+  const prisma = new PrismaClient({
+    datasources: {
+      db: {
+        url: process.env.DATABASE_URL,
+      },
+    },
+  })
+  
   try {
     const body = await request.json()
     console.log('Telegram webhook received:', JSON.stringify(body, null, 2))
@@ -353,5 +362,8 @@ Ketik /saldo untuk cek total hari ini 📊`,
   } catch (error) {
     console.error('Webhook error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  } finally {
+    // Clean up Prisma connection to avoid prepared statement conflicts
+    await prisma.$disconnect()
   }
 }

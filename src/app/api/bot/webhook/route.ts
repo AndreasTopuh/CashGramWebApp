@@ -440,10 +440,8 @@ Ketik /saldo untuk cek total hari ini 📊`,
             })
           }
         }
-      }
-      
-      // Continue with single expense processing if multiple parsing also failed
-      if (!parsed || parsed.confidence < 60) {
+        
+        // If multiple parsing also failed, show error message
         return NextResponse.json({
           method: 'sendMessage',
           chat_id: chatId,
@@ -451,7 +449,7 @@ Ketik /saldo untuk cek total hari ini 📊`,
 
 Contoh format yang benar:
 • "nasi goreng 20rb"
-• "ojek ke mall 15k"
+• "ojek ke mall 15k" 
 • "beli pulsa 50 ribu"
 
 Atau gunakan command:
@@ -460,7 +458,7 @@ Atau gunakan command:
         })
       }
 
-      // Get or create category
+      // Process single expense (if parsing was successful with good confidence)
       const decoded = jwt.verify(telegramUser.token, process.env.JWT_SECRET!) as any
       let category = await prisma.category.findFirst({
         where: { 

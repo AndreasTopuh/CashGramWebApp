@@ -40,6 +40,7 @@ export default function DashboardPage() {
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [categoryId, setCategoryId] = useState('')
+  const [saving, setSaving] = useState(false)
 
   const loadData = useCallback(async (token: string) => {
     try {
@@ -89,8 +90,29 @@ export default function DashboardPage() {
     router.push('/login')
   }
 
+  // Format number with commas
+  const formatNumber = (value: string) => {
+    // Remove all non-digit characters
+    const numbers = value.replace(/\D/g, '')
+    // Add commas
+    return numbers.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  }
+
+  // Parse formatted number back to float
+  const parseFormattedNumber = (value: string) => {
+    return parseFloat(value.replace(/,/g, ''))
+  }
+
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatNumber(e.target.value)
+    setAmount(formatted)
+  }
+
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!amount || !categoryId) return
+    
+    setSaving(true)
     const token = localStorage.getItem('token')
 
     try {
@@ -101,7 +123,7 @@ export default function DashboardPage() {
           Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({
-          amount: parseFloat(amount),
+          amount: parseFormattedNumber(amount),
           description,
           categoryId
         })
@@ -116,6 +138,8 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error('Error adding expense:', error)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -151,7 +175,8 @@ export default function DashboardPage() {
     for (let i = 6; i >= 0; i--) {
       const date = new Date()
       date.setDate(date.getDate() - i)
-      const dateStr = date.toISOString().split('T')[0]
+      // Convert to Asia/Makassar timezone for proper date comparison
+      const dateStr = date.toLocaleDateString('en-CA', { timeZone: 'Asia/Makassar' }) // en-CA gives YYYY-MM-DD format
       
       const dayExpenses = expenses.filter(expense => 
         expense.date.split('T')[0] === dateStr
@@ -198,6 +223,15 @@ export default function DashboardPage() {
       style: 'currency',
       currency: 'IDR'
     }).format(amount)
+  }
+
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString('id-ID', {
+      timeZone: 'Asia/Makassar',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
   }
 
   if (loading) {
@@ -459,11 +493,11 @@ export default function DashboardPage() {
                     Jumlah
                   </label>
                   <input
-                    type="number"
+                    type="text"
                     value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    onChange={handleAmountChange}
                     placeholder="0"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
                     required
                   />
                 </div>
@@ -475,7 +509,7 @@ export default function DashboardPage() {
                   <select
                     value={categoryId}
                     onChange={(e) => setCategoryId(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
                     required
                   >
                     <option value="">Pilih kategori</option>
@@ -496,7 +530,7 @@ export default function DashboardPage() {
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Catatan pengeluaran"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
                   />
                 </div>
 
@@ -510,12 +544,26 @@ export default function DashboardPage() {
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                    disabled={saving}
+                    className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Simpan
+                    {saving ? 'Menyimpan...' : 'Simpan'}
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Loading Modal */}
+        {saving && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl p-8 max-w-sm mx-4 text-center">
+              <div className="mb-4">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Menyimpan Data</h3>
+              <p className="text-gray-600">Sedang menyimpan pengeluaran ke database...</p>
             </div>
           </div>
         )}
@@ -564,6 +612,7 @@ export default function DashboardPage() {
                         <div className="flex items-center space-x-4 mt-1">
                           <p className="text-sm text-gray-600">
                             {new Date(expense.date).toLocaleDateString('id-ID', {
+                              timeZone: 'Asia/Makassar',
                               weekday: 'long',
                               day: 'numeric',
                               month: 'long'
@@ -571,6 +620,7 @@ export default function DashboardPage() {
                           </p>
                           <p className="text-sm text-gray-500">
                             {new Date(expense.date).toLocaleTimeString('id-ID', {
+                              timeZone: 'Asia/Makassar',
                               hour: '2-digit',
                               minute: '2-digit'
                             })}

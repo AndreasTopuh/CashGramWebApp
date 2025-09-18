@@ -74,26 +74,45 @@ Berikan hanya JSON tanpa penjelasan tambahan:
       }
 
       const prompt = `
-Sebagai financial advisor AI, analisis data pengeluaran berikut dan berikan insight dalam bahasa Indonesia:
+Sebagai financial advisor AI, analisis data pengeluaran berikut dan berikan insight dalam bahasa Indonesia dengan format MARKDOWN yang rapi:
 
 Data pengeluaran:
 ${JSON.stringify(expenseData, null, 2)}
 
-Berikan analisis yang mencakup:
-1. 📊 **Ringkasan Pengeluaran** - Total dan rata-rata harian
-2. 🏆 **Kategori Tertinggi** - Kategori yang paling boros
-3. 💡 **Insight & Pola** - Temukan pola pengeluaran yang menarik  
-4. ⚠️ **Rekomendasi** - Saran untuk menghemat atau mengoptimalkan pengeluaran
-5. 🎯 **Tips Praktis** - Tips konkret yang bisa diterapkan
+Buat analisis dengan format MARKDOWN berikut:
 
-Format dengan emoji dan markdown untuk tampilan yang menarik. Maksimal 500 kata.
+## 📊 **Ringkasan Pengeluaran**
+- **Total Pengeluaran:** Rp [total]
+- **Jumlah Transaksi:** [jumlah] transaksi
+- **Rata-rata Pengeluaran Harian:** Rp [rata-rata]
+
+## 🏆 **Kategori Tertinggi**
+Kategori pengeluaran tertinggi adalah **[kategori]** dengan total Rp [jumlah] ([persentase]% dari total pengeluaran).
+
+## 💡 **Insight & Pola**
+[Berikan insight menarik tentang pola pengeluaran dalam 2-3 bullet points]
+- Insight 1
+- Insight 2
+
+## ⚠️ **Rekomendasi**
+[Berikan rekomendasi konkret untuk menghemat atau mengoptimalkan pengeluaran]
+- Rekomendasi 1
+- Rekomendasi 2
+
+## 🎯 **Tips Praktis**
+[Berikan tips praktis yang bisa diterapkan]
+- **Tip 1:** [penjelasan singkat]
+- **Tip 2:** [penjelasan singkat]
+- **Tip 3:** [penjelasan singkat]
+
+Gunakan format markdown yang rapi dengan **bold**, bullet points, dan emoji. Maksimal 400 kata.
 `
 
       const result = await model.generateContent(prompt)
       return result.response.text()
     } catch (error) {
       console.error('Error generating analysis:', error)
-      return 'Maaf, terjadi kesalahan saat menganalisis data pengeluaran Anda.'
+      return `## ❌ **Error**\nMaaf, terjadi kesalahan saat menganalisis data pengeluaran Anda.`
     }
   }
 
@@ -104,17 +123,31 @@ Format dengan emoji dan markdown untuk tampilan yang menarik. Maksimal 500 kata.
       const totalSpending = expenses.reduce((sum, exp) => sum + exp.amount, 0)
       
       const prompt = `
-Analisis pengeluaran ${periodText} dengan data berikut:
+Analisis pengeluaran ${periodText} dengan data berikut dan buat dalam format MARKDOWN:
 - Total pengeluaran: Rp ${totalSpending.toLocaleString('id-ID')}
 - Jumlah transaksi: ${expenses.length}
 - Pengeluaran per hari: ${expenses.map(e => `${e.description}: Rp ${e.amount.toLocaleString('id-ID')}`).join(', ')}
 
-Berikan insight singkat dan padat tentang:
-1. Apakah pengeluaran wajar untuk ${periodText}?
-2. Kategori mana yang dominan?
-3. Saran singkat untuk periode selanjutnya
+Buat analisis dengan format MARKDOWN berikut:
 
-Maksimal 200 kata, gunakan bahasa santai dan emoji.
+## 📊 **Analisis Pengeluaran ${periodText.charAt(0).toUpperCase() + periodText.slice(1)}**
+
+### 💰 **Ringkasan**
+- **Total:** Rp [total]
+- **Transaksi:** [jumlah] kali
+- **Rata-rata:** Rp [rata-rata] per hari
+
+### 📈 **Status Pengeluaran**
+[Apakah pengeluaran wajar/berlebihan untuk ${periodText}?]
+
+### 🏆 **Kategori Dominan**
+[Kategori mana yang paling banyak dan berapa persentasenya?]
+
+### 💡 **Saran untuk Periode Selanjutnya**
+- [Saran 1]
+- [Saran 2]
+
+Gunakan format markdown dengan **bold**, bullet points, dan emoji. Maksimal 150 kata, bahasa santai.
 `
 
       const result = await model.generateContent(prompt)
@@ -122,7 +155,7 @@ Maksimal 200 kata, gunakan bahasa santai dan emoji.
     } catch (error) {
       console.error('Error generating period analysis:', error)
       const periodText = period === 'week' ? 'minggu ini' : 'bulan ini'
-      return `Maaf, terjadi kesalahan saat menganalisis pengeluaran ${periodText}.`
+      return `## ❌ **Error**\nMaaf, terjadi kesalahan saat menganalisis pengeluaran ${periodText}.`
     }
   }
 }

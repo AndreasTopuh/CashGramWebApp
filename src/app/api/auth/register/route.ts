@@ -47,6 +47,24 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Create default categories for new user
+    const defaultCategories = [
+      { name: 'Makanan', icon: '🍽️', color: '#EF4444' },
+      { name: 'Transportasi', icon: '🚗', color: '#3B82F6' },
+      { name: 'Belanja', icon: '🛒', color: '#10B981' },
+      { name: 'Hiburan', icon: '🎭', color: '#8B5CF6' },
+      { name: 'Kesehatan', icon: '🏥', color: '#F59E0B' },
+      { name: 'Pendidikan', icon: '📚', color: '#6366F1' },
+      { name: 'Lainnya', icon: '💰', color: '#6B7280' }
+    ]
+
+    await prisma.category.createMany({
+      data: defaultCategories.map(cat => ({
+        ...cat,
+        userId: user.id
+      }))
+    })
+
     // Generate token
     const token = generateToken(user.id)
 

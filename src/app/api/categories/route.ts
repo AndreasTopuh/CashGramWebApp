@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import jwt from 'jsonwebtoken'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const authorization = request.headers.get('authorization')
+    if (!authorization?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const token = authorization.split(' ')[1]
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any
+
     const categories = await prisma.category.findMany({
+      where: { userId: decoded.userId },
       orderBy: { name: 'asc' }
     })
 
@@ -19,6 +29,14 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const authorization = request.headers.get('authorization')
+    if (!authorization?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const token = authorization.split(' ')[1]
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any
+    
     const { name, color, icon } = await request.json()
 
     if (!name) {
@@ -32,7 +50,8 @@ export async function POST(request: NextRequest) {
       data: {
         name,
         color: color || '#3B82F6',
-        icon: icon || '💰'
+        icon: icon || '💰',
+        userId: decoded.userId
       }
     })
 

@@ -18,22 +18,29 @@ model User {
   updatedAt DateTime @updatedAt
   
   // Relations
-  expenses  Expense[]
+  expenses     Expense[]
+  telegramUser TelegramUser?
+  categories   Category[]
   
   @@map("users")
 }
 
 model Category {
   id        String   @id @default(cuid())
-  name      String   @unique
+  name      String
   color     String   @default("#3B82F6") // Default blue color
   icon      String   @default("💰")      // Default money icon
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
+  // Foreign Keys
+  userId    String
+  
   // Relations
   expenses  Expense[]
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  @@unique([name, userId])
   @@map("categories")
 }
 
@@ -54,4 +61,19 @@ model Expense {
   category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   
   @@map("expenses")
+}
+
+model TelegramUser {
+  id         String   @id @default(cuid())
+  telegramId String   @unique
+  userId     String   @unique
+  token      String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  // Relations
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("telegram_users")
 }

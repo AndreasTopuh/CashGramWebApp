@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { Plus, LogOut, Trash2, TrendingUp, Calendar, BarChart3, PieChart } from 'lucide-react'
+import { Plus, LogOut, Trash2, TrendingUp, Calendar, BarChart3, PieChart, Brain } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, BarChart, Bar } from 'recharts'
 
 interface User {
@@ -41,11 +41,18 @@ export default function DashboardPage() {
   const [description, setDescription] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [saving, setSaving] = useState(false)
+  
+  // AI Analysis states
+  const [showAIAnalysis, setShowAIAnalysis] = useState(false)
+  const [aiAnalysis, setAiAnalysis] = useState('')
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false)
 
   const loadData = useCallback(async (token: string) => {
     try {
       // Load categories
-      const categoriesRes = await fetch('/api/categories')
+      const categoriesRes = await fetch('/api/categories', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
       if (categoriesRes.ok) {
         const categoriesData = await categoriesRes.json()
         setCategories(Array.isArray(categoriesData) ? categoriesData : [])
@@ -159,6 +166,35 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error('Error deleting expense:', error)
+    }
+  }
+
+  const handleAIAnalysis = async () => {
+    setLoadingAnalysis(true)
+    setShowAIAnalysis(true)
+    
+    const token = localStorage.getItem('token')
+    
+    try {
+      const response = await fetch('/api/ai/analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setAiAnalysis(data.analysis)
+      } else {
+        setAiAnalysis('❌ Gagal menganalisis data. Coba lagi nanti.')
+      }
+    } catch (error) {
+      console.error('Error generating AI analysis:', error)
+      setAiAnalysis('❌ Terjadi kesalahan saat menganalisis data.')
+    } finally {
+      setLoadingAnalysis(false)
     }
   }
 
@@ -468,6 +504,14 @@ export default function DashboardPage() {
             Tambah Pengeluaran
           </button>
           
+          <button
+            onClick={handleAIAnalysis}
+            className="flex items-center justify-center bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-lg hover:from-purple-700 hover:to-pink-700 transition font-medium"
+          >
+            <Brain size={20} className="mr-2" />
+            Analysis with AI
+          </button>
+          
           <select
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
@@ -564,6 +608,39 @@ export default function DashboardPage() {
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Menyimpan Data</h3>
               <p className="text-gray-600">Sedang menyimpan pengeluaran ke database...</p>
+            </div>
+          </div>
+        )}
+
+        {/* AI Analysis Modal */}
+        {showAIAnalysis && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center">
+                  <Brain className="text-purple-600 mr-3" size={24} />
+                  <h3 className="text-xl font-bold text-gray-900">AI Analysis Report</h3>
+                </div>
+                <button
+                  onClick={() => setShowAIAnalysis(false)}
+                  className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
+                >
+                  ×
+                </button>
+              </div>
+              
+              {loadingAnalysis ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                  <p className="text-gray-600">AI sedang menganalisis data pengeluaran Anda...</p>
+                </div>
+              ) : (
+                <div className="prose max-w-none">
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-4 whitespace-pre-wrap text-gray-800">
+                    {aiAnalysis}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

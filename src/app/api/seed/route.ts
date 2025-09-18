@@ -14,23 +14,10 @@ const defaultCategories = [
 
 export async function POST() {
   try {
-    // Check if categories already exist
-    const existingCategories = await prisma.category.count()
-    
-    if (existingCategories > 0) {
-      return NextResponse.json({ message: 'Categories already exist' })
-    }
-
-    // Create default categories
-    await prisma.category.createMany({
-      data: defaultCategories
-    })
-
-    const categories = await prisma.category.findMany()
-
-    return NextResponse.json({
-      message: 'Default categories created successfully',
-      categories
+    // Categories are now user-specific, not global
+    // Default categories will be created when users first register
+    return NextResponse.json({ 
+      message: 'Categories are now user-specific. Default categories created during user registration.' 
     })
   } catch (error) {
     console.error('Seed categories error:', error)

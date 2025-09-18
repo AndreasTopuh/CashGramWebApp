@@ -6,14 +6,25 @@ const globalForPrisma = globalThis as unknown as {
 
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL,
-    },
-  },
 })
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
-// Ensure connection on first use
-prisma.$connect().catch(console.error)
+// Add connection handling for serverless
+export async function connectDB() {
+  try {
+    await prisma.$connect()
+    return true
+  } catch (error) {
+    console.error('Database connection failed:', error)
+    return false
+  }
+}
+
+export async function disconnectDB() {
+  try {
+    await prisma.$disconnect()
+  } catch (error) {
+    console.error('Database disconnect failed:', error)
+  }
+}

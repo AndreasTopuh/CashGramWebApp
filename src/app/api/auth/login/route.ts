@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { prisma, connectDB, disconnectDB } from '@/lib/prisma'
 import { verifyPassword, formatPhoneNumber, generateToken } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
@@ -22,16 +22,16 @@ export async function POST(request: NextRequest) {
     console.log('Formatted phone:', formattedPhone)
 
     // Test database connection
-    try {
-      await prisma.$connect()
-      console.log('Database connected successfully')
-    } catch (dbError) {
-      console.error('Database connection failed:', dbError)
+    const isConnected = await connectDB()
+    if (!isConnected) {
+      console.error('Database connection failed')
       return NextResponse.json(
         { error: 'Database connection failed' },
         { status: 500 }
       )
     }
+
+    console.log('Database connected successfully')
 
     // Find user
     console.log('Finding user with phone:', formattedPhone)
@@ -99,5 +99,8 @@ export async function POST(request: NextRequest) {
       { error: 'Internal server error' },
       { status: 500 }
     )
+  } finally {
+    // Always disconnect in serverless environment
+    await disconnectDB()
   }
 }

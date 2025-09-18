@@ -54,7 +54,8 @@ Selamat menggunakan CashGram! 🚀`
 
       try {
         // Authenticate user
-        const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/auth/login`, {
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://cash-gram-web-app.vercel.app'
+        const response = await fetch(`${baseUrl}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone, password })

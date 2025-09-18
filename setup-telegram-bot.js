@@ -45,7 +45,7 @@ async function getBotInfo() {
 // Run setup
 console.log('🤖 Setting up CashGram Telegram Bot...')
 getBotInfo()
-// setupTelegramWebhook() // Uncomment this when ready to setup webhook
+setupTelegramWebhook() // Now active to setup webhook
 
 console.log(`
 📋 Next Steps:

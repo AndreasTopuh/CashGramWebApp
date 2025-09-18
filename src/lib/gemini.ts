@@ -138,7 +138,7 @@ Return only valid JSON without markdown formatting.
       }
 
       const prompt = `
-Sebagai financial advisor AI, analisis data pengeluaran berikut dan berikan insight dalam bahasa Indonesia dengan format MARKDOWN yang rapi:
+Analisis data pengeluaran berikut dan berikan insight dalam bahasa Indonesia yang mudah dipahami:
 
 Data pengeluaran:
 ${JSON.stringify(expenseData, null, 2)}
@@ -146,30 +146,27 @@ ${JSON.stringify(expenseData, null, 2)}
 Buat analisis dengan format MARKDOWN berikut:
 
 ## 📊 **Ringkasan Pengeluaran**
-- **Total Pengeluaran:** Rp [total]
-- **Jumlah Transaksi:** [jumlah] transaksi
-- **Rata-rata Pengeluaran Harian:** Rp [rata-rata]
+- **Total:** Rp [total]
+- **Transaksi:** [jumlah] kali
+- **Rata-rata harian:** Rp [rata-rata]
 
-## 🏆 **Kategori Tertinggi**
-Kategori pengeluaran tertinggi adalah **[kategori]** dengan total Rp [jumlah] ([persentase]% dari total pengeluaran).
+## 🏆 **Yang Paling Banyak**
+[Kategori] adalah yang paling banyak dengan Rp [jumlah] ([persentase]% dari total).
 
-## 💡 **Insight & Pola**
-[Berikan insight menarik tentang pola pengeluaran dalam 2-3 bullet points]
-- Insight 1
-- Insight 2
+## 💡 **Yang Menarik**
+- [Insight sederhana tentang pola pengeluaran]
+- [Pola kebiasaan yang terlihat]
 
-## ⚠️ **Rekomendasi**
-[Berikan rekomendasi konkret untuk menghemat atau mengoptimalkan pengeluaran]
-- Rekomendasi 1
-- Rekomendasi 2
+## 💰 **Saran Sederhana**
+- [Saran praktis dan mudah diterapkan]
+- [Tips hemat yang realistis]
 
-## 🎯 **Tips Praktis**
-[Berikan tips praktis yang bisa diterapkan]
-- **Tip 1:** [penjelasan singkat]
-- **Tip 2:** [penjelasan singkat]
-- **Tip 3:** [penjelasan singkat]
+## � **Jangan Lupa!**
+- **Menabung:** Sisihkan minimal 10% dari penghasilan untuk tabungan darurat
+- **Investasi:** Mulai investasi kecil-kecilan untuk masa depan yang lebih baik
+- **Evaluasi:** Periksa pengeluaran setiap minggu agar tetap terkontrol
 
-Gunakan format markdown yang rapi dengan **bold**, bullet points, dan emoji. Maksimal 400 kata.
+Gunakan bahasa santai dan mudah dipahami. Maksimal 350 kata.
 `
 
       const result = await model.generateContent(prompt)
@@ -202,16 +199,20 @@ Buat analisis dengan format MARKDOWN berikut:
 - **Rata-rata:** Rp [rata-rata] per hari
 
 ### 📈 **Status Pengeluaran**
-[Apakah pengeluaran wajar/berlebihan untuk ${periodText}?]
+[Apakah pengeluaran wajar/normal untuk ${periodText}?]
 
-### 🏆 **Kategori Dominan**
+### 🏆 **Kategori Favorit**
 [Kategori mana yang paling banyak dan berapa persentasenya?]
 
-### 💡 **Saran untuk Periode Selanjutnya**
-- [Saran 1]
-- [Saran 2]
+### 💡 **Saran Sederhana**
+- [Saran praktis yang mudah diterapkan]
+- [Tips hemat yang realistis]
 
-Gunakan format markdown dengan **bold**, bullet points, dan emoji. Maksimal 150 kata, bahasa santai.
+### 🏦 **Jangan Lupa**
+- **Menabung:** Sisihkan minimal 20% untuk tabungan
+- **Investasi:** Mulai investasi untuk masa depan
+
+Gunakan bahasa santai dan mudah dipahami. Maksimal 200 kata.
 `
 
       const result = await model.generateContent(prompt)

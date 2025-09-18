@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { Plus, LogOut, Trash2, TrendingUp, Calendar, BarChart3, PieChart, Brain } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, BarChart, Bar } from 'recharts'
+import ReactMarkdown from 'react-markdown'
 
 interface User {
   id: string
@@ -635,9 +636,21 @@ export default function DashboardPage() {
                   <p className="text-gray-600">AI sedang menganalisis data pengeluaran Anda...</p>
                 </div>
               ) : (
-                <div className="prose max-w-none">
-                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-4 whitespace-pre-wrap text-gray-800">
-                    {aiAnalysis}
+                <div className="prose prose-lg max-w-none">
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-6 text-gray-800">
+                    <ReactMarkdown 
+                      components={{
+                        h2: ({children}) => <h2 className="text-xl font-bold text-gray-900 mb-3 mt-4 first:mt-0">{children}</h2>,
+                        h3: ({children}) => <h3 className="text-lg font-semibold text-gray-800 mb-2 mt-3">{children}</h3>,
+                        p: ({children}) => <p className="text-gray-700 mb-2 leading-relaxed">{children}</p>,
+                        ul: ({children}) => <ul className="list-disc list-inside space-y-1 mb-3 text-gray-700">{children}</ul>,
+                        li: ({children}) => <li className="ml-2">{children}</li>,
+                        strong: ({children}) => <strong className="font-semibold text-gray-900">{children}</strong>,
+                        code: ({children}) => <code className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded text-sm">{children}</code>
+                      }}
+                    >
+                      {aiAnalysis}
+                    </ReactMarkdown>
                   </div>
                 </div>
               )}

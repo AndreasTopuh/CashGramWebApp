@@ -4,7 +4,20 @@ import jwt from 'jsonwebtoken'
 import { PrismaClient } from '@prisma/client'
 import { formatPhoneNumber } from '@/lib/auth'
 
-// Helper functions for category icons and colors
+// Helper function to strip markdown formatting for Telegram
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/#{1,6}\s/g, '') // Remove headers ###
+    .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold **text**
+    .replace(/\*(.*?)\*/g, '$1') // Remove italic *text*
+    .replace(/`(.*?)`/g, '$1') // Remove code `text`
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove links [text](url)
+    .replace(/^[\s]*[-*+]\s/gm, '• ') // Convert bullet points
+    .replace(/^\s*\d+\.\s/gm, '') // Remove numbered lists
+    .trim()
+}
+
+// Helper function to get category icon based on name
 function getCategoryIcon(category: string): string {
   const iconMap: { [key: string]: string } = {
     'Makanan': '🍔',
@@ -243,8 +256,7 @@ Sekarang Anda bisa:
         return NextResponse.json({
           method: 'sendMessage',
           chat_id: chatId,
-          text: analysis,
-          parse_mode: 'Markdown'
+          text: stripMarkdown(analysis)
         })
       } catch (error) {
         console.error('Analysis error:', error)

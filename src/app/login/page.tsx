@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import NoSSR from '@/components/NoSSR'
 
 export default function LoginPage() {
@@ -48,7 +49,15 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
         <div className="text-center mb-8">
-          <div className="text-4xl mb-4">💰</div>
+          <div className="mb-4 flex justify-center">
+            <Image
+              src="/cashgram-logo.svg"
+              alt="CashGram Logo"
+              width={64}
+              height={64}
+              className="w-16 h-16"
+            />
+          </div>
           <h1 className="text-3xl font-bold text-gray-900">CashGram</h1>
           <p className="text-gray-600 mt-2">Masuk ke akun Anda</p>
         </div>

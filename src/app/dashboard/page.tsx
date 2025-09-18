@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { Plus, LogOut, Trash2, TrendingUp, Calendar, BarChart3, PieChart } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, BarChart, Bar } from 'recharts'
 
@@ -203,7 +204,15 @@ export default function DashboardPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-4xl mb-4">💰</div>
+          <div className="mb-4 flex justify-center">
+            <Image
+              src="/cashgram-logo.svg"
+              alt="CashGram Logo"
+              width={48}
+              height={48}
+              className="w-12 h-12"
+            />
+          </div>
           <p className="text-gray-600">Loading...</p>
         </div>
       </div>
@@ -217,7 +226,15 @@ export default function DashboardPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <div className="text-2xl mr-3">💰</div>
+              <div className="mr-3">
+                <Image
+                  src="/cashgram-logo.svg"
+                  alt="CashGram Logo"
+                  width={32}
+                  height={32}
+                  className="w-8 h-8"
+                />
+              </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900">CashGram</h1>
                 <p className="text-xs text-gray-500">Dashboard</p>
@@ -506,7 +523,7 @@ export default function DashboardPage() {
         {/* Expenses List */}
         <div className="bg-white rounded-2xl shadow-sm border">
           <div className="p-6 border-b">
-            <h3 className="text-lg font-semibold">Pengeluaran Terbaru</h3>
+            <h3 className="text-lg text-black font-semibold">Pengeluaran Terbaru</h3>
             <p className="text-sm text-gray-600 mt-1">Riwayat transaksi pengeluaran Anda</p>
           </div>
 

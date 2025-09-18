@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyPassword, formatPhoneNumber, generateToken } from '@/lib/auth'
 
-// Use Edge Runtime for better performance
-export const runtime = 'edge'
+// Remove edge runtime to fix JWT crypto issues
+// export const runtime = 'edge'
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('Login attempt started (Edge Runtime)')
+    console.log('Login attempt started (Node Runtime)')
     const { phone, password } = await request.json()
     console.log('Login data:', { phone: phone?.substring(0, 5) + '***', hasPassword: !!password })
 
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     const formattedPhone = formatPhoneNumber(phone)
     console.log('Formatted phone:', formattedPhone)
 
-    // For now, use direct database query instead of Prisma to avoid connection issues
+    // Use direct database query to avoid Prisma connection issues
     const dbUrl = process.env.DATABASE_URL
     if (!dbUrl) {
       return NextResponse.json(
@@ -31,9 +31,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Import postgres client dynamically for edge runtime
+    // Import postgres client for Node.js runtime
     const { Pool } = await import('pg')
-    const pool = new Pool({ connectionString: dbUrl })
+    const pool = new Pool({ 
+      connectionString: dbUrl,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    })
 
     try {
       // Find user

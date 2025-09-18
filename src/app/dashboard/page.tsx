@@ -32,7 +32,6 @@ export default function DashboardPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
-  const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [filterCategory, setFilterCategory] = useState<string>('')
   const router = useRouter()
 
@@ -327,7 +326,7 @@ export default function DashboardPage() {
                     tickFormatter={(value) => `${value / 1000}k`}
                   />
                   <Tooltip 
-                    formatter={(value: any) => [formatCurrency(value), 'Pengeluaran']}
+                    formatter={(value: number) => [formatCurrency(value), 'Pengeluaran']}
                     labelStyle={{ color: '#374151' }}
                   />
                   <Area 
@@ -369,7 +368,7 @@ export default function DashboardPage() {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: any) => formatCurrency(value)} />
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
                 </RechartsPieChart>
               </ResponsiveContainer>
             </div>
@@ -397,7 +396,7 @@ export default function DashboardPage() {
                   tick={{ fontSize: 12, fill: '#6b7280' }}
                   tickFormatter={(value) => `${value / 1000}k`}
                 />
-                <Tooltip formatter={(value: any) => formatCurrency(value)} />
+                <Tooltip formatter={(value: number) => formatCurrency(value)} />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                   {categoryData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -516,7 +515,7 @@ export default function DashboardPage() {
             <div className="p-8 text-center text-gray-500">
               <div className="text-4xl mb-4">📝</div>
               <p className="text-lg font-medium">Belum ada pengeluaran</p>
-              <p className="text-sm text-gray-400 mt-1">Mulai catat pengeluaran Anda dengan klik tombol "Tambah Pengeluaran"</p>
+              <p className="text-sm text-gray-400 mt-1">Mulai catat pengeluaran Anda dengan klik tombol &quot;Tambah Pengeluaran&quot;</p>
             </div>
           ) : (
             <div className="divide-y">

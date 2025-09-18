@@ -9,15 +9,20 @@ const prisma = new PrismaClient()
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    console.log('Telegram webhook received:', JSON.stringify(body, null, 2))
+    
     const { message } = body
 
     if (!message) {
+      console.log('No message in webhook payload')
       return NextResponse.json({ error: 'No message provided' }, { status: 400 })
     }
 
     const chatId = message.chat.id
     const text = message.text
     const userId = message.from.id
+
+    console.log('Processing message:', { chatId, text, userId })
 
     // Handle /start command
     if (text === '/start') {
@@ -68,21 +73,60 @@ Selamat menggunakan CashGram! 🚀`
         if (response.ok) {
           const { token, user } = await response.json()
           
-          // Store telegram user mapping
-          await prisma.telegramUser.upsert({
-            where: { telegramId: userId.toString() },
-            update: { 
-              userId: user.id,
-              token: token,
-              isActive: true 
-            },
-            create: {
-              telegramId: userId.toString(),
-              userId: user.id,
-              token: token,
-              isActive: true
+          // Store telegram user mapping with better error handling
+          try {
+            // First check if there's already a mapping for this user
+            const existingMapping = await prisma.telegramUser.findUnique({
+              where: { userId: user.id }
+            })
+            
+            if (existingMapping) {
+              // Update existing mapping
+              await prisma.telegramUser.update({
+                where: { id: existingMapping.id },
+                data: {
+                  telegramId: userId.toString(),
+                  token: token,
+                  isActive: true,
+                  updatedAt: new Date()
+                }
+              })
+              console.log('Updated existing TelegramUser mapping')
+            } else {
+              // Check if this telegramId already exists with a different user
+              const existingTelegramMapping = await prisma.telegramUser.findUnique({
+                where: { telegramId: userId.toString() }
+              })
+              
+              if (existingTelegramMapping) {
+                // Update the telegram mapping to new user
+                await prisma.telegramUser.update({
+                  where: { telegramId: userId.toString() },
+                  data: {
+                    userId: user.id,
+                    token: token,
+                    isActive: true,
+                    updatedAt: new Date()
+                  }
+                })
+                console.log('Updated TelegramUser mapping to new user')
+              } else {
+                // Create new mapping
+                await prisma.telegramUser.create({
+                  data: {
+                    telegramId: userId.toString(),
+                    userId: user.id,
+                    token: token,
+                    isActive: true
+                  }
+                })
+                console.log('Created new TelegramUser mapping')
+              }
             }
-          })
+          } catch (dbError) {
+            console.error('Database error with TelegramUser:', dbError)
+            // Continue anyway since login was successful
+          }
 
           return NextResponse.json({
             method: 'sendMessage',
@@ -95,6 +139,10 @@ Sekarang Anda bisa:
 📈 Cek saldo hari ini: /saldo`
           })
         } else {
+          console.log('Login failed, response status:', response.status)
+          const errorText = await response.text()
+          console.log('Login error response:', errorText)
+          
           return NextResponse.json({
             method: 'sendMessage',
             chat_id: chatId,
@@ -102,7 +150,7 @@ Sekarang Anda bisa:
           })
         }
       } catch (error) {
-        console.error('Login error:', error)
+        console.error('Login request error:', error)
         return NextResponse.json({
           method: 'sendMessage',
           chat_id: chatId,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, LogOut, Trash2, TrendingUp, Calendar, BarChart3, PieChart } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, BarChart, Bar } from 'recharts'
@@ -40,20 +40,7 @@ export default function DashboardPage() {
   const [description, setDescription] = useState('')
   const [categoryId, setCategoryId] = useState('')
 
-  useEffect(() => {
-    const token = localStorage.getItem('token')
-    const userData = localStorage.getItem('user')
-
-    if (!token || !userData) {
-      router.push('/login')
-      return
-    }
-
-    setUser(JSON.parse(userData))
-    loadData(token)
-  }, [router])
-
-  const loadData = async (token: string) => {
+  const loadData = useCallback(async (token: string) => {
     try {
       // Load categories
       const categoriesRes = await fetch('/api/categories')
@@ -80,7 +67,20 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filterCategory])
+
+  useEffect(() => {
+    const token = localStorage.getItem('token')
+    const userData = localStorage.getItem('user')
+
+    if (!token || !userData) {
+      router.push('/login')
+      return
+    }
+
+    setUser(JSON.parse(userData))
+    loadData(token)
+  }, [router, loadData])
 
   const handleLogout = () => {
     localStorage.removeItem('token')

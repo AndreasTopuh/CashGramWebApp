@@ -4,6 +4,35 @@ import jwt from 'jsonwebtoken'
 import { PrismaClient } from '@prisma/client'
 import { formatPhoneNumber } from '@/lib/auth'
 
+// Helper functions for category icons and colors
+function getCategoryIcon(category: string): string {
+  const iconMap: { [key: string]: string } = {
+    'Makanan': '🍔',
+    'Transportasi': '🚗',
+    'Belanja': '🛒',
+    'Hiburan': '🎮',
+    'Kesehatan': '🏥',
+    'Komunikasi': '📱',
+    'Pendidikan': '📚',
+    'Lainnya': '💰'
+  }
+  return iconMap[category] || '💰'
+}
+
+function getCategoryColor(category: string): string {
+  const colorMap: { [key: string]: string } = {
+    'Makanan': '#EF4444',
+    'Transportasi': '#3B82F6',
+    'Belanja': '#10B981',
+    'Hiburan': '#8B5CF6',
+    'Kesehatan': '#F59E0B',
+    'Komunikasi': '#06B6D4',
+    'Pendidikan': '#6B7280',
+    'Lainnya': '#64748B'
+  }
+  return colorMap[category] || '#64748B'
+}
+
 export async function POST(request: NextRequest) {
   // Use direct connection (not pooled) to avoid prepared statement conflicts in serverless
   const prisma = new PrismaClient({
@@ -296,8 +325,86 @@ Ketik /start untuk login kembali.`
 
     // Handle expense input
     try {
+      // First try single expense parsing
       const parsed = await GeminiService.parseExpenseText(text)
       
+      // If single parsing fails or low confidence, try multiple parsing
+      if (!parsed || parsed.confidence < 70) {
+        const multipleResult = await GeminiService.parseMultipleExpenses(text)
+        
+        if (multipleResult && multipleResult.expenses.length > 0) {
+          // Process multiple expenses
+          const decoded = jwt.verify(telegramUser.token, process.env.JWT_SECRET!) as any
+          const savedExpenses = []
+          
+          for (const expense of multipleResult.expenses) {
+            if (expense.confidence > 60) {
+              // Find or create category
+              let category = await prisma.category.findFirst({
+                where: {
+                  userId: decoded.userId,
+                  name: expense.category || 'Lainnya'
+                }
+              })
+              
+              if (!category) {
+                category = await prisma.category.create({
+                  data: {
+                    name: expense.category || 'Lainnya',
+                    icon: getCategoryIcon(expense.category || 'Lainnya'),
+                    color: getCategoryColor(expense.category || 'Lainnya'),
+                    userId: decoded.userId
+                  }
+                })
+              }
+              
+              // Save expense
+              const savedExpense = await prisma.expense.create({
+                data: {
+                  amount: expense.amount,
+                  description: expense.description,
+                  categoryId: category.id,
+                  userId: decoded.userId,
+                  date: new Date()
+                },
+                include: {
+                  category: true
+                }
+              })
+              
+              savedExpenses.push(savedExpense)
+            }
+          }
+          
+          if (savedExpenses.length > 0) {
+            const total = savedExpenses.reduce((sum, exp) => sum + exp.amount, 0)
+            const expenseList = savedExpenses.map(exp => 
+              `${exp.category.icon} ${exp.description}: Rp ${exp.amount.toLocaleString('id-ID')}`
+            ).join('\n')
+            
+            return NextResponse.json({
+              method: 'sendMessage',
+              chat_id: chatId,
+              text: `✅ *Berhasil mencatat ${savedExpenses.length} pengeluaran:*
+
+${expenseList}
+
+💰 *Total: Rp ${total.toLocaleString('id-ID')}*
+📅 ${new Date().toLocaleDateString('id-ID', { 
+                timeZone: 'Asia/Makassar',
+                weekday: 'long', 
+                day: 'numeric', 
+                month: 'long' 
+              })}
+
+Ketik /saldo untuk cek total hari ini 📊`,
+              parse_mode: 'Markdown'
+            })
+          }
+        }
+      }
+      
+      // Continue with single expense processing if multiple parsing also failed
       if (!parsed || parsed.confidence < 60) {
         return NextResponse.json({
           method: 'sendMessage',

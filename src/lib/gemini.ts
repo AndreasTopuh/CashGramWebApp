@@ -10,6 +10,11 @@ export interface ParsedExpense {
   confidence: number
 }
 
+export interface MultipleExpenseResult {
+  expenses: ParsedExpense[]
+  totalFound: number
+}
+
 export class GeminiService {
   // Parse natural language expense input
   static async parseExpenseText(text: string): Promise<ParsedExpense | null> {
@@ -53,6 +58,65 @@ Berikan hanya JSON tanpa penjelasan tambahan:
       }
     } catch (error) {
       console.error('Error parsing expense with Gemini:', error)
+      return null
+    }
+  }
+
+  // Parse multiple expenses from one text input
+  static async parseMultipleExpenses(text: string): Promise<MultipleExpenseResult | null> {
+    try {
+      const prompt = `
+Parse this Indonesian text and extract ALL expenses/purchases mentioned.
+
+Text: "${text}"
+
+Find every expense/purchase mentioned and return as JSON:
+{
+  "expenses": [
+    {
+      "amount": number (in rupiah),
+      "description": "item description only",
+      "category": "Makanan|Transportasi|Belanja|Hiburan|Kesehatan|Komunikasi|Lainnya",
+      "confidence": number (0-100)
+    }
+  ],
+  "totalFound": number
+}
+
+Rules:
+- Only extract actual purchases with monetary amounts
+- Convert: rb/ribu → 1000, k → 1000
+- Examples: "5rb" → 5000, "23ribu" → 23000, "15k" → 15000
+- Ignore time references: kemarin, trus, setelah itu, pulang
+- Category based on item: food items → Makanan, transport → Transportasi
+- Clean description: "beli ayam goreng 5rb" → "ayam goreng"
+- High confidence for clear amounts and items
+
+Return only valid JSON without markdown formatting.
+`
+
+      const result = await model.generateContent(prompt)
+      const response = result.response.text().trim()
+      
+      // Clean response - remove markdown code blocks if present
+      const cleanResponse = response.replace(/```json\n?|\n?```/g, '').trim()
+      const parsed = JSON.parse(cleanResponse)
+      
+      // Validate and filter response
+      if (parsed.expenses && Array.isArray(parsed.expenses)) {
+        const validExpenses = parsed.expenses.filter((exp: any) => 
+          exp.amount && exp.amount > 0 && exp.description && exp.confidence > 60
+        )
+        
+        return {
+          expenses: validExpenses,
+          totalFound: validExpenses.length
+        }
+      }
+      
+      return null
+    } catch (error) {
+      console.error('Error parsing multiple expenses:', error)
       return null
     }
   }

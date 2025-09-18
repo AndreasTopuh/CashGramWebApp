@@ -57,9 +57,9 @@ Selamat menggunakan CashGram! 🚀`
       const formattedPhone = formatPhoneNumber(phone)
 
       try {
-        // Authenticate user using edge runtime for better performance
+        // Authenticate user using standard login (fallback from edge)
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://cash-gram-web-app.vercel.app'
-        const response = await fetch(`${baseUrl}/api/auth/login-edge`, {
+        const response = await fetch(`${baseUrl}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone: formattedPhone, password })

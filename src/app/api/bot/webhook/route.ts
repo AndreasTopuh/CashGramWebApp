@@ -165,7 +165,7 @@ Sekarang Anda bisa:
       where: { telegramId: userId.toString() }
     })
 
-    if (!telegramUser || !telegramUser.isActive) {
+    if (!telegramUser || !telegramUser.isActive || !telegramUser.token) {
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
@@ -252,6 +252,7 @@ ${todayExpenses.map(exp => `• ${exp.description}: Rp ${exp.amount.toLocaleStri
           where: { telegramId: userId.toString() },
           data: {
             isActive: false,
+            token: null,
             updatedAt: new Date()
           }
         })

@@ -67,7 +67,7 @@ model TelegramUser {
   id         String   @id @default(cuid())
   telegramId String   @unique
   userId     String   @unique
-  token      String
+  token      String?
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

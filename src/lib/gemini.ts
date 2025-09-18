@@ -60,22 +60,41 @@ Output: {"amount": 20000, "description": "nasi goreng", "category": "Makanan", "
 Contoh input: "ojek 15k"
 Output: {"amount": 15000, "description": "ojek", "category": "Transportasi", "confidence": 90}
 
-Berikan hanya JSON tanpa penjelasan tambahan:
+PENTING: Berikan HANYA JSON murni tanpa teks tambahan apapun!
 `
 
       const result = await retryWithBackoff(async () => {
         return await model.generateContent(prompt)
       })
-      const response = result.response.text()
+      const response = result.response.text().trim()
       
-      // Clean the response to extract JSON
-      const jsonMatch = response.match(/\{[\s\S]*\}/)
-      if (!jsonMatch) return null
+      // Enhanced JSON extraction
+      let jsonString = response
       
-      const parsed = JSON.parse(jsonMatch[0])
+      // Remove markdown code blocks if present
+      jsonString = jsonString.replace(/```json\n?|\n?```/g, '').trim()
+      
+      // Try to extract JSON from response
+      const jsonMatch = jsonString.match(/\{[^}]*\}/)
+      if (jsonMatch) {
+        jsonString = jsonMatch[0]
+      }
+      
+      // Clean up common issues
+      jsonString = jsonString
+        .replace(/,\s*}/, '}')  // Remove trailing commas
+        .replace(/,\s*,/g, ',') // Remove double commas
+        .trim()
+      
+      console.log('Attempting to parse JSON:', jsonString)
+      
+      const parsed = JSON.parse(jsonString)
       
       // Validate required fields
-      if (!parsed.amount || !parsed.description) return null
+      if (!parsed.amount || !parsed.description) {
+        console.log('Missing required fields in parsed JSON')
+        return null
+      }
       
       return {
         amount: Number(parsed.amount),
@@ -85,6 +104,71 @@ Berikan hanya JSON tanpa penjelasan tambahan:
       }
     } catch (error) {
       console.error('Error parsing expense with Gemini:', error)
+      
+      // Fallback: Try to parse manually for simple cases
+      try {
+        const fallbackResult = GeminiService.fallbackExpenseParser(text)
+        if (fallbackResult) {
+          console.log('Using fallback parser result')
+          return fallbackResult
+        }
+      } catch (fallbackError) {
+        console.error('Fallback parser also failed:', fallbackError)
+      }
+      
+      return null
+    }
+  }
+
+  // Fallback parser for when Gemini fails
+  private static fallbackExpenseParser(text: string): ParsedExpense | null {
+    try {
+      // Simple regex-based parsing for common patterns
+      const amountPattern = /(\d+(?:\.\d+)?)\s*(rb|ribu|k|000)/i
+      const amountMatch = text.match(amountPattern)
+      
+      if (!amountMatch) return null
+      
+      let amount = parseFloat(amountMatch[1])
+      const unit = amountMatch[2].toLowerCase()
+      
+      // Convert to rupiah
+      if (unit === 'rb' || unit === 'ribu') {
+        amount *= 1000
+      } else if (unit === 'k') {
+        amount *= 1000
+      }
+      
+      // Extract description (remove amount and common words)
+      let description = text
+        .replace(amountPattern, '')
+        .replace(/\b(kemarin|tadi|beli|bayar|untuk|ke|di|dari|saya|kan|trus|setelah|itu|pulang)\b/gi, '')
+        .trim()
+        .replace(/\s+/g, ' ')
+      
+      if (!description || description.length < 2) {
+        description = 'Pengeluaran'
+      }
+      
+      // Simple category detection
+      let category = 'Lainnya'
+      const foodKeywords = ['makan', 'nasi', 'ayam', 'soto', 'bakso', 'mie', 'kopi', 'teh', 'roti']
+      const transportKeywords = ['ojek', 'bus', 'taksi', 'bensin', 'parkir', 'tol']
+      
+      const lowerText = text.toLowerCase()
+      if (foodKeywords.some(keyword => lowerText.includes(keyword))) {
+        category = 'Makanan'
+      } else if (transportKeywords.some(keyword => lowerText.includes(keyword))) {
+        category = 'Transportasi'
+      }
+      
+      return {
+        amount,
+        description,
+        category,
+        confidence: 70 // Lower confidence for fallback parsing
+      }
+    } catch (error) {
       return null
     }
   }
@@ -119,7 +203,7 @@ Rules:
 - Clean description: "beli ayam goreng 5rb" → "ayam goreng"
 - High confidence for clear amounts and items
 
-Return only valid JSON without markdown formatting.
+PENTING: Berikan HANYA JSON murni tanpa teks tambahan!
 `
 
       const result = await retryWithBackoff(async () => {
@@ -127,9 +211,29 @@ Return only valid JSON without markdown formatting.
       })
       const response = result.response.text().trim()
       
-      // Clean response - remove markdown code blocks if present
-      const cleanResponse = response.replace(/```json\n?|\n?```/g, '').trim()
-      const parsed = JSON.parse(cleanResponse)
+      // Enhanced JSON cleaning
+      let jsonString = response
+      
+      // Remove markdown formatting
+      jsonString = jsonString.replace(/```json\n?|\n?```/g, '').trim()
+      
+      // Try to extract valid JSON object
+      const jsonMatch = jsonString.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        jsonString = jsonMatch[0]
+      }
+      
+      // Clean up common JSON issues
+      jsonString = jsonString
+        .replace(/,\s*}/g, '}')      // Remove trailing commas in objects
+        .replace(/,\s*]/g, ']')      // Remove trailing commas in arrays
+        .replace(/,\s*,/g, ',')      // Remove double commas
+        .replace(/}\s*{/g, '},{')    // Fix missing commas between objects
+        .trim()
+      
+      console.log('Parsing multiple expenses JSON:', jsonString)
+      
+      const parsed = JSON.parse(jsonString)
       
       // Validate and filter response
       if (parsed.expenses && Array.isArray(parsed.expenses)) {
@@ -146,6 +250,30 @@ Return only valid JSON without markdown formatting.
       return null
     } catch (error) {
       console.error('Error parsing multiple expenses:', error)
+      
+      // Try fallback: split by common separators and parse individually
+      try {
+        const parts = text.split(/\s+(trus|terus|lalu|kemudian|setelah itu)\s+/i)
+        const expenses: ParsedExpense[] = []
+        
+        for (const part of parts) {
+          const singleExpense = await GeminiService.parseExpenseText(part.trim())
+          if (singleExpense && singleExpense.confidence > 60) {
+            expenses.push(singleExpense)
+          }
+        }
+        
+        if (expenses.length > 0) {
+          console.log('Using fallback multiple parsing')
+          return {
+            expenses,
+            totalFound: expenses.length
+          }
+        }
+      } catch (fallbackError) {
+        console.error('Fallback multiple parsing failed:', fallbackError)
+      }
+      
       return null
     }
   }

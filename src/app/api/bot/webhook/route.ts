@@ -363,14 +363,17 @@ Ketik /start untuk login kembali.`
 
     // Handle expense input
     try {
-      // First try single expense parsing
-      const parsed = await GeminiService.parseExpenseText(text)
+      // Check if text contains multiple indicators (prioritize multiple parsing for complex input)
+      const hasMultipleIndicators = /\b(dan|trus|terus|lalu|kemudian|setelah itu|sambil|juga)\b/i.test(text)
+      const wordCount = text.split(/\s+/).length
       
-      // If single parsing fails or low confidence, try multiple parsing
-      if (!parsed || parsed.confidence < 70) {
+      const shouldTryMultiple = hasMultipleIndicators || wordCount > 8
+      
+      if (shouldTryMultiple) {
+        // Try multiple parsing first for complex input
         const multipleResult = await GeminiService.parseMultipleExpenses(text)
         
-        if (multipleResult && multipleResult.expenses.length > 0) {
+        if (multipleResult && multipleResult.expenses.length > 1) {
           // Process multiple expenses
           const decoded = jwt.verify(telegramUser.token, process.env.JWT_SECRET!) as any
           const savedExpenses = []
@@ -440,8 +443,89 @@ Ketik /saldo untuk cek total hari ini 📊`,
             })
           }
         }
+      }
+      
+      // Try single expense parsing (fallback or for simple input)
+      const parsed = await GeminiService.parseExpenseText(text)
+      
+      // If single parsing fails, try multiple parsing as last resort
+      if (!parsed || parsed.confidence < 60) {
+        if (!shouldTryMultiple) {
+          const multipleResult = await GeminiService.parseMultipleExpenses(text)
+          
+          if (multipleResult && multipleResult.expenses.length > 0) {
+            // Process multiple expenses (same code as above)
+            const decoded = jwt.verify(telegramUser.token, process.env.JWT_SECRET!) as any
+            const savedExpenses = []
+            
+            for (const expense of multipleResult.expenses) {
+              if (expense.confidence > 60) {
+                // Find or create category
+                let category = await prisma.category.findFirst({
+                  where: {
+                    userId: decoded.userId,
+                    name: expense.category || 'Lainnya'
+                  }
+                })
+                
+                if (!category) {
+                  category = await prisma.category.create({
+                    data: {
+                      name: expense.category || 'Lainnya',
+                      icon: getCategoryIcon(expense.category || 'Lainnya'),
+                      color: getCategoryColor(expense.category || 'Lainnya'),
+                      userId: decoded.userId
+                    }
+                  })
+                }
+                
+                // Save expense
+                const savedExpense = await prisma.expense.create({
+                  data: {
+                    amount: expense.amount,
+                    description: expense.description,
+                    categoryId: category.id,
+                    userId: decoded.userId,
+                    date: new Date()
+                  },
+                  include: {
+                    category: true
+                  }
+                })
+                
+                savedExpenses.push(savedExpense)
+              }
+            }
+            
+            if (savedExpenses.length > 0) {
+              const total = savedExpenses.reduce((sum, exp) => sum + exp.amount, 0)
+              const expenseList = savedExpenses.map(exp => 
+                `${exp.category.icon} ${exp.description}: Rp ${exp.amount.toLocaleString('id-ID')}`
+              ).join('\n')
+              
+              return NextResponse.json({
+                method: 'sendMessage',
+                chat_id: chatId,
+                text: `✅ *Berhasil mencatat ${savedExpenses.length} pengeluaran:*
+
+${expenseList}
+
+💰 *Total: Rp ${total.toLocaleString('id-ID')}*
+📅 ${new Date().toLocaleDateString('id-ID', { 
+                    timeZone: 'Asia/Makassar',
+                    weekday: 'long', 
+                    day: 'numeric', 
+                    month: 'long' 
+                  })}
+
+Ketik /saldo untuk cek total hari ini 📊`,
+                parse_mode: 'Markdown'
+              })
+            }
+          }
+        }
         
-        // If multiple parsing also failed, show error message
+        // If all parsing failed, show error message
         return NextResponse.json({
           method: 'sendMessage',
           chat_id: chatId,

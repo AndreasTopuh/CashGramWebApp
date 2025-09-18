@@ -36,19 +36,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
-        text: `🎉 Selamat datang di CashGram Bot!
+        text: `🎉 Selamat datang di CashGram Bot!, Bot pencatatan dengan integrasi AI menggunakan GEMIN.
 
-Untuk memulai, silakan login dengan nomor HP yang terdaftar:
+🔐 **CARA LOGIN:**
 Ketik: /login [nomor_hp] [password]
-Contoh: /login 085717797065 password123
+Contoh: /login 085717797*** password***
 
-Setelah login, Anda bisa:
-💰 Input pengeluaran: "makan siang 25rb"
-📊 Analisis: /analisis minggu atau /analisis bulan
-📈 Info saldo: /saldo
-👋 Logout: /logout
+💻 **DASHBOARD WEBSITE:**
+Untuk melihat dashboard lengkap, silakan login ke:
+🌐 https://cash-gram-web-app.vercel.app/
+Gunakan nomor HP dan password yang sama seperti di bot.
 
-Selamat menggunakan CashGram! 🚀`
+🤖 **FUNGSI BOT YANG TERSEDIA:**
+• 💰 Input pengeluaran: "makan siang 25rb"
+• 📊 Analisis pengeluaran: /analisis minggu atau /analisis bulan
+• 📈 Cek saldo harian: /saldo
+• 👋 Logout dari bot: /logout
+
+📱 **KEUNGGULAN:**
+✅ Pencatatan otomatis dengan AI
+✅ Analisis keuangan real-time
+✅ Sinkronisasi dengan dashboard web
+✅ Kategorisasi otomatis pengeluaran
+✅ Laporan periode (minggu/bulan)
+
+Mulai dengan /login untuk menggunakan semua fitur! 🚀`
       })
     }
 
@@ -144,7 +156,7 @@ Selamat menggunakan CashGram! 🚀`
 Sekarang Anda bisa:
 💰 Input pengeluaran: "nasi goreng 20rb"
 📊 Lihat analisis: /analisis minggu
-📈 Cek saldo hari ini: /saldo`
+📈 Cek pengeluaran hari ini: /saldo`
           })
         } else {
           console.log('Login failed, response status:', response.status)

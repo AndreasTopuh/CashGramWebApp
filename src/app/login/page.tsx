@@ -46,7 +46,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-400 via-pink-500 to-red-500 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-green-400 via-emerald-500 to-teal-500 flex items-center justify-center p-4 relative overflow-hidden">
       {/* Background decoration */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-white bg-opacity-10 rounded-full"></div>
@@ -59,19 +59,19 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <div className="mb-6 flex justify-center">
             <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl blur-lg opacity-60"></div>
-              <div className="relative bg-gradient-to-r from-purple-600 to-pink-600 p-4 rounded-2xl">
+              <div className="absolute inset-0 bg-gradient-to-r from-green-500 to-emerald-500 rounded-2xl blur-lg opacity-60"></div>
+              <div className="relative bg-gradient-to-r from-green-500 to-emerald-500 p-4 rounded-2xl">
                 <Image
                   src="/cashgram-logo.svg"
                   alt="CashGram Logo"
                   width={48}
                   height={48}
-                  className="w-12 h-12 filter brightness-0 invert"
+                  className="w-12 h-12"
                 />
               </div>
             </div>
           </div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
             CashGram
           </h1>
           <p className="text-gray-600 mt-3 text-lg">Kelola keuangan dengan mudah</p>
@@ -108,7 +108,7 @@ export default function LoginPage() {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="08123456789"
-                  className="w-full px-4 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all duration-200 placeholder-gray-400"
+                  className="w-full px-4 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 placeholder-gray-400"
                   required
                 />
               </div>
@@ -125,7 +125,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-4 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all duration-200 placeholder-gray-400"
+                  className="w-full px-4 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 placeholder-gray-400"
                   required
                 />
               </div>
@@ -134,7 +134,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-4 px-4 rounded-xl hover:from-purple-700 hover:to-pink-700 focus:ring-4 focus:ring-purple-300 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+              className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white py-4 px-4 rounded-xl hover:from-green-700 hover:to-emerald-700 focus:ring-4 focus:ring-green-300 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
             >
               {loading ? (
                 <div className="flex items-center justify-center space-x-2">
@@ -157,7 +157,7 @@ export default function LoginPage() {
           
           <p className="text-gray-600">
             Belum punya akun?{' '}
-            <Link href="/register" className="bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent font-semibold hover:from-purple-700 hover:to-pink-700 transition-all duration-200">
+            <Link href="/register" className="bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent font-semibold hover:from-green-700 hover:to-emerald-700 transition-all duration-200">
               Daftar sekarang
             </Link>
           </p>
@@ -165,9 +165,9 @@ export default function LoginPage() {
           <div className="pt-4 border-t border-gray-100">
             <p className="text-xs text-gray-500">
               Dengan masuk, Anda menyetujui{' '}
-              <span className="text-purple-600 hover:text-purple-700 cursor-pointer">Syarat & Ketentuan</span>
+              <span className="text-green-600 hover:text-green-700 cursor-pointer">Syarat & Ketentuan</span>
               {' '}dan{' '}
-              <span className="text-purple-600 hover:text-purple-700 cursor-pointer">Kebijakan Privasi</span>
+              <span className="text-green-600 hover:text-green-700 cursor-pointer">Kebijakan Privasi</span>
             </p>
           </div>
         </div>

@@ -413,7 +413,7 @@ Ketik /start untuk login kembali.`
     // Handle expense input
     try {
       // Check if text contains multiple indicators (prioritize multiple parsing for complex input)
-      const hasMultipleIndicators = /\b(dan|trus|terus|lalu|kemudian|setelah itu|sambil|juga)\b/i.test(text)
+      const hasMultipleIndicators = /\b(dan|trus|terus|lalu|kemudian|setelah itu|sambil|juga|serta|selain|kong|abis itu)\b/i.test(text)
       const wordCount = text.split(/\s+/).length
       
       const shouldTryMultiple = hasMultipleIndicators || wordCount > 8

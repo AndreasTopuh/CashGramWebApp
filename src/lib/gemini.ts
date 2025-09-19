@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' })
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
 // Helper function for retry mechanism
 async function retryWithBackoff<T>(
@@ -253,7 +253,7 @@ PENTING: Berikan HANYA JSON murni tanpa teks tambahan!
       
       // Try fallback: split by common separators and parse individually
       try {
-        const parts = text.split(/\s+(trus|terus|lalu|kemudian|setelah itu)\s+/i)
+        const parts = text.split(/\s+(dan|trus|terus|lalu|kemudian|setelah itu|sambil|juga|serta|selain|kong|abis itu)\s+/i)
         const expenses: ParsedExpense[] = []
         
         for (const part of parts) {

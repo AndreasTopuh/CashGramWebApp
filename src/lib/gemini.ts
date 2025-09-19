@@ -306,14 +306,18 @@ Belum ada pengeluaran untuk dianalisis.
     const topCategory = Object.entries(categoryStats)
       .sort(([,a]: any, [,b]: any) => b - a)[0]
 
-    const avgDaily = totalSpending / 7 // assuming weekly analysis
+    // Calculate actual days with expenses for accurate daily average
+    const expenseDates = expenses.map(exp => new Date(exp.date).toDateString())
+    const uniqueDays = [...new Set(expenseDates)].length
+    const avgDaily = uniqueDays > 0 ? totalSpending / uniqueDays : 0
     
     return `## 📊 **Analisis Pengeluaran**
 
 ### 💰 **Ringkasan**
 - **Total**: Rp ${totalSpending.toLocaleString('id-ID')}
 - **Transaksi**: ${expenses.length} kali
-- **Rata-rata**: Rp ${Math.round(avgDaily).toLocaleString('id-ID')} per hari
+- **Hari aktif**: ${uniqueDays} hari
+- **Rata-rata**: Rp ${Math.round(avgDaily).toLocaleString('id-ID')} per hari aktif
 
 ### 🏆 **Kategori Teratas**
 ${topCategory ? `${topCategory[0]} adalah yang tertinggi dengan Rp ${(topCategory[1] as number).toLocaleString('id-ID')}` : 'Belum ada kategori dominan'}
@@ -461,7 +465,12 @@ Belum ada pengeluaran untuk ${periodText.toLowerCase()} ini.
         }
         
         const totalSpending = expenses.reduce((sum, exp) => sum + exp.amount, 0)
-        const avgDaily = totalSpending / (period === 'week' ? 7 : 30)
+        
+        // Calculate actual days with expenses for accurate daily average
+        const expenseDates = expenses.map(exp => new Date(exp.date).toDateString())
+        const uniqueDays = [...new Set(expenseDates)].length
+        const avgDaily = uniqueDays > 0 ? totalSpending / uniqueDays : 0
+        
         const categoryStats = expenses.reduce((acc: any, exp) => {
           const category = exp.category?.name || 'Lainnya'
           acc[category] = (acc[category] || 0) + exp.amount
@@ -476,7 +485,8 @@ Belum ada pengeluaran untuk ${periodText.toLowerCase()} ini.
 ### 💰 **Ringkasan**
 - **Total**: Rp ${totalSpending.toLocaleString('id-ID')}
 - **Transaksi**: ${expenses.length} kali
-- **Rata-rata**: Rp ${Math.round(avgDaily).toLocaleString('id-ID')} per hari
+- **Hari aktif**: ${uniqueDays} hari
+- **Rata-rata**: Rp ${Math.round(avgDaily).toLocaleString('id-ID')} per hari aktif
 
 ### 🏆 **Kategori Favorit**
 ${topCategory ? `${topCategory[0]} adalah yang paling banyak dengan Rp ${(topCategory[1] as number).toLocaleString('id-ID')}` : 'Belum ada kategori dominan'}

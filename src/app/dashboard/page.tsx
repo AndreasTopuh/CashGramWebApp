@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { Plus, LogOut, Trash2, TrendingUp, Calendar, BarChart3, PieChart, Brain } from 'lucide-react'
+import { Plus, LogOut, Trash2, TrendingUp, Calendar, BarChart3, PieChart, Brain, MessageCircle, Download } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, BarChart, Bar } from 'recharts'
 import ReactMarkdown from 'react-markdown'
 
@@ -199,6 +199,47 @@ export default function DashboardPage() {
     }
   }
 
+  const handleExportToExcel = async () => {
+    const token = localStorage.getItem('token')
+    
+    try {
+      const response = await fetch('/api/export', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+
+      if (response.ok) {
+        // Get filename from response headers
+        const contentDisposition = response.headers.get('content-disposition')
+        const filename = contentDisposition 
+          ? contentDisposition.split('filename=')[1].replace(/"/g, '')
+          : `CashGram-Export-${new Date().toISOString().split('T')[0]}.xlsx`
+        
+        // Create blob and download
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+        
+        // Show success message
+        alert('✅ Data berhasil diekspor ke Excel!')
+      } else {
+        const error = await response.json()
+        alert(`❌ ${error.error || 'Gagal mengekspor data'}`)
+      }
+    } catch (error) {
+      console.error('Error exporting to Excel:', error)
+      alert('❌ Terjadi kesalahan saat mengekspor data')
+    }
+  }
+
   const totalExpenses = Array.isArray(expenses) ? expenses.reduce((sum, expense) => sum + expense.amount, 0) : 0
   const totalTransactions = Array.isArray(expenses) ? expenses.length : 0
   const dailyAverage = totalTransactions > 0 ? totalExpenses / 30 : 0 // Assuming 30 days
@@ -318,6 +359,18 @@ export default function DashboardPage() {
                 </p>
                 <p className="text-xs text-gray-500">{user?.phone}</p>
               </div>
+              
+              <a
+                href="https://t.me/cuentabot_bot"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center space-x-2 text-blue-600 hover:text-blue-700 transition p-2 rounded-lg hover:bg-blue-50"
+                title="Chat dengan CashGram Bot"
+              >
+                <MessageCircle size={20} />
+                <span className="hidden md:inline text-sm font-medium">Bot Telegram</span>
+              </a>
+              
               <button
                 onClick={handleLogout}
                 className="flex items-center text-gray-600 hover:text-red-600 transition p-2 rounded-lg hover:bg-red-50"
@@ -511,6 +564,14 @@ export default function DashboardPage() {
           >
             <Brain size={20} className="mr-2" />
             Analysis with AI
+          </button>
+          
+          <button
+            onClick={handleExportToExcel}
+            className="flex items-center justify-center bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition font-medium"
+          >
+            <Download size={20} className="mr-2" />
+            Export Excel
           </button>
           
           <select

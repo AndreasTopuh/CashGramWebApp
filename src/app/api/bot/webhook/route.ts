@@ -410,6 +410,99 @@ Ketik /start untuk login kembali.`
       }
     }
 
+    // Handle info command
+    if (text === '/info') {
+      return NextResponse.json({
+        method: 'sendMessage',
+        chat_id: chatId,
+        text: `ℹ️ *Panduan Lengkap CashGram Bot*
+
+📝 *CATAT PENGELUARAN:*
+• Format: "[item] [jumlah]"
+• Contoh: "nasi goreng 20rb"
+• Multiple: "nasi goreng 20rb dan es teh 5rb"
+
+🤖 *PERINTAH BOT:*
+📊 /analisis - Analisis AI pengeluaran bulanan
+📊 /analisis minggu - Analisis mingguan
+💰 /saldo - Total pengeluaran hari ini
+📤 /export - Export data ke Excel (segera)
+🔓 /logout - Keluar dari bot
+🔄 /reset - Reset dan login ulang
+ℹ️ /info - Tampilkan panduan ini
+
+🌐 *DASHBOARD WEB:*
+Akses lengkap: cash-gram-web-app.vercel.app
+• Lihat grafik pengeluaran
+• Analisis mendalam
+• Export data Excel
+
+💡 *TIPS:*
+• Bot mendukup bahasa Indonesia
+• Otomatis kategorisasi pengeluaran
+• AI analisis pola spending Anda
+
+📱 Developed by CashGram Team`,
+        parse_mode: 'Markdown'
+      })
+    }
+
+    // Handle export command
+    if (text === '/export') {
+      try {
+        const decoded = jwt.verify(telegramUser.token, process.env.JWT_SECRET!) as any
+        
+        // Get user expenses for export
+        const expenses = await prisma.expense.findMany({
+          where: { userId: decoded.userId },
+          include: { category: true },
+          orderBy: { date: 'desc' }
+        })
+
+        if (expenses.length === 0) {
+          return NextResponse.json({
+            method: 'sendMessage',
+            chat_id: chatId,
+            text: `📤 *Export Excel*
+
+❌ Tidak ada data pengeluaran untuk diekspor.
+
+💡 *Mulai catat pengeluaran:*
+• Format: "nasi goreng 20rb"
+• Gunakan /saldo untuk melihat pengeluaran hari ini`
+          })
+        }
+
+        // For now, send user to dashboard for export
+        // In the future, we could generate and send Excel file directly
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: `📤 *Export Excel*
+
+📊 Ditemukan ${expenses.length} transaksi pengeluaran!
+
+💡 *Cara Export:*
+1. Buka dashboard: cash-gram-web-app.vercel.app
+2. Login dengan nomor HP dan password Anda
+3. Klik tombol "Export Excel" hijau
+
+📱 Atau tunggu fitur export langsung di bot (coming soon)
+
+🌐 Dashboard: cash-gram-web-app.vercel.app`,
+          parse_mode: 'Markdown'
+        })
+
+      } catch (error) {
+        console.error('Export command error:', error)
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: '❌ Terjadi kesalahan saat mengakses data export. Coba lagi nanti.'
+        })
+      }
+    }
+
     // Handle expense input
     try {
       // Check if text contains multiple indicators (prioritize multiple parsing for complex input)
@@ -487,7 +580,10 @@ ${expenseList}
                 month: 'long' 
               })}
 
-Ketik /saldo untuk cek total hari ini 📊`,
+💡 *Fitur lainnya:*
+📊 /analisis - AI analisis pengeluaran
+💰 /saldo - Total pengeluaran hari ini  
+🌐 Dashboard: cash-gram-web-app.vercel.app`,
               parse_mode: 'Markdown'
             })
           }
@@ -567,7 +663,10 @@ ${expenseList}
                     month: 'long' 
                   })}
 
-Ketik /saldo untuk cek total hari ini 📊`,
+💡 *Fitur lainnya:*
+📊 /analisis - AI analisis pengeluaran
+💰 /saldo - Total pengeluaran hari ini  
+🌐 Dashboard: cash-gram-web-app.vercel.app`,
                 parse_mode: 'Markdown'
               })
             }
@@ -634,7 +733,10 @@ Atau gunakan command:
           month: 'long' 
         })}
 
-Ketik /saldo untuk cek total hari ini 📊`,
+💡 *Fitur lainnya:*
+📊 /analisis - AI analisis pengeluaran
+💰 /saldo - Total pengeluaran hari ini  
+🌐 Dashboard: cash-gram-web-app.vercel.app`,
         parse_mode: 'Markdown'
       })
 

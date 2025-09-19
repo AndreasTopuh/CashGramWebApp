@@ -87,26 +87,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
-        text: `🎉 Selamat datang di CashGram Bot!, Bot pencatatan dengan integrasi AI menggunakan GEMIN.
+        text: `🎉 Selamat datang di CashGram Bot!, Bot pencatatan dengan integrasi AI menggunakan GEMINI.
+
+💻 DASHBOARD WEBSITE:
+Untuk melihat dashboard lengkap, silakan buat akun ke:
+🌐 https://cash-gram-web-app.vercel.app
+Gunakan nomor HP dan password yang valid setelah Registerasi, untuk login ke dashboard web/Bot Telegram.
 
 🔐 CARA LOGIN:
 Ketik: /login [nomor_hp] [password]
-Contoh: /login 085717797*** password***
+Contoh: /login 085717799999 passwordanda
 
 � MASALAH LOGIN?
 Ketik: /reset
 (Gunakan jika ada masalah re-login)
 
-�💻 DASHBOARD WEBSITE:
-Untuk melihat dashboard lengkap, silakan login ke:
-🌐 https://cash-gram-web-app.vercel.app/
-Gunakan nomor HP dan password yang sama seperti di bot.
-
 🤖 FUNGSI BOT YANG TERSEDIA:
-• 💰 Input pengeluaran: "makan siang 25rb"
-• 📊 Analisis pengeluaran: /analisis minggu atau /analisis bulan
-• 📈 Cek saldo harian: /saldo
-• 👋 Logout dari bot: /logout
+• 💰 Input pengeluaran: "makan siang 25rb" atau "hari ini saya makan ayam 25 rb dan saya beli aqua 10 rb"
+
+📊 /analisis - Analisis AI pengeluaran bulanan
+📊 /analisis minggu - Analisis mingguan
+💰 /saldo - Total pengeluaran hari ini
+📤 /export - Export data ke Excel (segera)
+🔓 /logout - Keluar dari bot
+🔄 /reset - Reset dan login ulang
+ℹ️ /info - Tampilkan panduan ini
 
 📱 KEUNGGULAN:
 ✅ Pencatatan otomatis dengan AI
@@ -209,9 +214,15 @@ Mulai dengan /login untuk menggunakan semua fitur! 🚀`
             text: `✅ Login berhasil! Selamat datang ${user.name}!
 
 Sekarang Anda bisa:
-💰 Input pengeluaran: "nasi goreng 20rb"
-📊 Lihat analisis: /analisis minggu
-📈 Cek pengeluaran hari ini: /saldo`
+• 💰 Input pengeluaran: "makan siang 25rb" atau "hari ini saya makan ayam 25 rb dan saya beli aqua 10 rb"
+
+📊 /analisis - Analisis AI pengeluaran bulanan
+📊 /analisis minggu - Analisis mingguan
+💰 /saldo - Total pengeluaran hari ini
+📤 /export - Export data ke Excel (segera)
+🔓 /logout - Keluar dari bot
+🔄 /reset - Reset dan login ulang
+ℹ️ /info - Tampilkan panduan ini`
           })
         } else {
           console.log('Login failed, response status:', response.status)
@@ -582,7 +593,10 @@ ${expenseList}
 
 💡 *Fitur lainnya:*
 📊 /analisis - AI analisis pengeluaran
-💰 /saldo - Total pengeluaran hari ini  
+💰 /saldo - Total pengeluaran hari ini
+📤 /export - Export data ke Excel (segera)
+🔓 /logout - Keluar dari bot
+🔄 /reset - Reset dan login ulang
 🌐 Dashboard: cash-gram-web-app.vercel.app`,
               parse_mode: 'Markdown'
             })
@@ -666,6 +680,10 @@ ${expenseList}
 💡 *Fitur lainnya:*
 📊 /analisis - AI analisis pengeluaran
 💰 /saldo - Total pengeluaran hari ini  
+📤 /export - Export data ke Excel (segera)
+🔓 /logout - Keluar dari bot
+🔄 /reset - Reset dan login ulang
+
 🌐 Dashboard: cash-gram-web-app.vercel.app`,
                 parse_mode: 'Markdown'
               })
@@ -683,10 +701,12 @@ Contoh format yang benar:
 • "nasi goreng 20rb"
 • "ojek ke mall 15k" 
 • "beli pulsa 50 ribu"
+• "saya makan ayam 25 rb dan saya beli aqua 10 rb"
 
 Atau gunakan command:
 /analisis minggu - Analisis minggu ini
-/saldo - Cek pengeluaran hari ini`
+/saldo - Cek pengeluaran hari ini
+/info - Tampilkan panduan lengkap`
         })
       }
 

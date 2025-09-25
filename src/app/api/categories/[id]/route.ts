@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken'
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   // Use fresh Prisma client to avoid prepared statement conflicts
   const prisma = new PrismaClient({
@@ -16,6 +16,7 @@ export async function PUT(
   })
 
   try {
+    const params = await context.params
     const authorization = request.headers.get('authorization')
     if (!authorization?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -89,7 +90,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   // Use fresh Prisma client to avoid prepared statement conflicts
   const prisma = new PrismaClient({
@@ -101,6 +102,7 @@ export async function DELETE(
   })
 
   try {
+    const params = await context.params
     const authorization = request.headers.get('authorization')
     if (!authorization?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

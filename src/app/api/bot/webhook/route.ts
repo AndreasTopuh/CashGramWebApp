@@ -1114,8 +1114,8 @@ ${expenseList}
         }
       })
 
-      // Create category buttons with budget info and status
-      const categoryButtons = categories.map(category => {
+      // Create category buttons with simple numbering instead of complex IDs
+      const categoryButtons = categories.map((category, index) => {
         let budgetInfo = ''
         let status = '📂'
         
@@ -1134,11 +1134,11 @@ ${expenseList}
               budgetInfo = ` (Budget habis - OVER BUDGET!)`
             }
           } else {
-            budgetInfo = ' (Tidak ada budget)'
+            budgetInfo = ' (Belum ada budget)'
           }
         }
         
-        return `/${status}_${category.id}_${parsed.amount}_${encodeURIComponent(parsed.description)}_${Date.now()} ${getCategoryIcon(category.name)} ${category.name}${budgetInfo}`
+        return `${index + 1}. ${status} ${getCategoryIcon(category.name)} ${category.name}${budgetInfo}`
       }).join('\n')
 
       return NextResponse.json({

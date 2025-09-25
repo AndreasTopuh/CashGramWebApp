@@ -40,15 +40,35 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Handle confirmation messages (lanjut/batal)
+    if (messageText.toLowerCase() === 'lanjut' || messageText.toLowerCase() === 'batal') {
+      const confirmResult = await handleConfirmation(prisma, chatId, messageText, telegramUser)
+      if (confirmResult) {
+        return confirmResult
+      }
+    }
+
     // Check if user is selecting a category number
     if (/^\d+$/.test(messageText)) {
       return await handleCategorySelection(prisma, chatId, parseInt(messageText), telegramUser)
     }
 
-    // Parse expense format: amount description
-    const expenseMatch = messageText.match(/^(\d+(?:\.\d+)?)\s+(.+)$/)
+    // Parse expense format: supports both "amount description" and "description amount"
+    let expenseMatch = messageText.match(/^(\d+(?:\.\d+)?)\s+(.+)$/) // format: 50000 makan siang
     if (expenseMatch) {
       return await handleExpenseInput(prisma, chatId, expenseMatch, telegramUser)
+    }
+    
+    // Try alternative format: description amount
+    expenseMatch = messageText.match(/^(.+)\s+(\d+(?:\.\d+)?)$/) // format: beli beras 150000
+    if (expenseMatch) {
+      // Create new match array with swapped order [full_match, amount, description]
+      const swappedMatch = Object.assign([expenseMatch[0], expenseMatch[2], expenseMatch[1]], {
+        index: expenseMatch.index,
+        input: expenseMatch.input,
+        groups: expenseMatch.groups
+      }) as RegExpMatchArray
+      return await handleExpenseInput(prisma, chatId, swappedMatch, telegramUser)
     }
 
     // Default help message

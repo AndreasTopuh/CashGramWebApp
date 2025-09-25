@@ -18,9 +18,11 @@ model User {
   updatedAt DateTime @updatedAt
   
   // Relations
-  expenses     Expense[]
-  telegramUser TelegramUser?
-  categories   Category[]
+  expenses       Expense[]
+  telegramUser   TelegramUser?
+  categories     Category[]
+  budgetPeriods  BudgetPeriod[]
+  savings        Savings[]
   
   @@map("users")
 }
@@ -37,8 +39,9 @@ model Category {
   userId    String
   
   // Relations
-  expenses  Expense[]
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expenses         Expense[]
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  budgetAllocations BudgetAllocation[]
   
   @@unique([name, userId])
   @@map("categories")
@@ -76,4 +79,55 @@ model TelegramUser {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@map("telegram_users")
+}
+
+model BudgetPeriod {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String   // e.g., "September 2024"
+  totalBudget Float    // Total monthly allowance
+  startDate   DateTime // e.g., 10 September
+  endDate     DateTime // e.g., 10 October
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  budgetAllocations BudgetAllocation[]
+  
+  @@unique([userId, startDate])
+  @@map("budget_periods")
+}
+
+model BudgetAllocation {
+  id              String   @id @default(cuid())
+  budgetPeriodId  String
+  categoryId      String
+  allocatedAmount Float    // Amount allocated for this category
+  spentAmount     Float    @default(0) // Amount spent so far
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  budgetPeriod BudgetPeriod @relation(fields: [budgetPeriodId], references: [id], onDelete: Cascade)
+  category     Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  @@unique([budgetPeriodId, categoryId])
+  @@map("budget_allocations")
+}
+
+model Savings {
+  id              String   @id @default(cuid())
+  userId          String
+  amount          Float
+  fromPeriodId    String   // Which budget period this saving came from
+  description     String?  // e.g., "Sisa budget September 2024"
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("savings")
 }

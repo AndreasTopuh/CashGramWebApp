@@ -28,6 +28,61 @@ interface Expense {
   category: Category
 }
 
+interface BudgetPeriod {
+  id: string
+  name: string
+  totalBudget: number
+  startDate: string
+  endDate: string
+  isActive: boolean
+  budgetAllocations: BudgetAllocation[]
+}
+
+interface BudgetAllocation {
+  id: string
+  categoryId: string
+  allocatedAmount: number
+  spentAmount: number
+  category: Category
+}
+
+interface BudgetStatus {
+  period: {
+    id: string
+    name: string
+    startDate: string
+    endDate: string
+    totalBudget: number
+  }
+  summary: {
+    totalBudget: number
+    totalAllocated: number
+    totalSpent: number
+    totalRemaining: number
+    unallocatedBudget: number
+    percentageUsed: number
+  }
+  categories: Array<{
+    id: string
+    category: Category
+    allocatedAmount: number
+    spentAmount: number
+    remainingAmount: number
+    percentageUsed: number
+    isOverBudget: boolean
+  }>
+}
+
+interface Savings {
+  savings: Array<{
+    id: string
+    amount: number
+    description: string
+    createdAt: string
+  }>
+  totalAmount: number
+}
+
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null)
   const [expenses, setExpenses] = useState<Expense[]>([])
@@ -49,6 +104,27 @@ export default function DashboardPage() {
   const [showAIAnalysis, setShowAIAnalysis] = useState(false)
   const [aiAnalysis, setAiAnalysis] = useState('')
   const [loadingAnalysis, setLoadingAnalysis] = useState(false)
+  
+  // Budget states
+  const [budgetStatus, setBudgetStatus] = useState<BudgetStatus | null>(null)
+  const [showBudgetForm, setShowBudgetForm] = useState(false)
+  const [showEditBudgetForm, setShowEditBudgetForm] = useState(false)
+  const [budgetName, setBudgetName] = useState('')
+  const [totalBudget, setTotalBudget] = useState('')
+  const [budgetStartDate, setBudgetStartDate] = useState('')
+  const [budgetEndDate, setBudgetEndDate] = useState('')
+  const [budgetAllocations, setBudgetAllocations] = useState<{[categoryId: string]: string}>({})
+  const [savingsBudget, setSavingsBudget] = useState(false)
+  const [savings, setSavings] = useState<Savings | null>(null)
+  const [showBudgetTab, setShowBudgetTab] = useState(false)
+  const [editingBudgetId, setEditingBudgetId] = useState<string>('')
+
+  // Category management states
+  const [showCategoryForm, setShowCategoryForm] = useState(false)
+  const [categoryName, setCategoryName] = useState('')
+  const [categoryIcon, setCategoryIcon] = useState('')
+  const [categoryColor, setCategoryColor] = useState('#3B82F6')
+  const [savingCategory, setSavingCategory] = useState(false)
 
   const loadData = useCallback(async (token: string) => {
     try {
@@ -70,7 +146,41 @@ export default function DashboardPage() {
         setExpenses(Array.isArray(expensesData) ? expensesData : [])
       } else {
         console.error('Failed to load expenses:', expensesRes.status)
+        const errorText = await expensesRes.text().catch(() => 'Unknown error')
+        console.error('Error details:', errorText)
         setExpenses([])
+      }
+
+      // Load budget status
+      try {
+        const budgetRes = await fetch('/api/budget/status', {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        if (budgetRes.ok) {
+          const budgetData = await budgetRes.json()
+          setBudgetStatus(budgetData)
+        } else if (budgetRes.status !== 404) {
+          console.error('Failed to load budget status:', budgetRes.status)
+          const errorText = await budgetRes.text().catch(() => 'Unknown error')
+          console.error('Budget error details:', errorText)
+        }
+      } catch (budgetError) {
+        console.error('Budget status fetch error:', budgetError)
+      }
+
+      // Load savings
+      try {
+        const savingsRes = await fetch('/api/budget/savings', {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        if (savingsRes.ok) {
+          const savingsData = await savingsRes.json()
+          setSavings(savingsData)
+        } else {
+          console.error('Failed to load savings:', savingsRes.status)
+        }
+      } catch (savingsError) {
+        console.error('Savings fetch error:', savingsError)
       }
     } catch (error) {
       console.error('Error loading data:', error)
@@ -172,6 +282,45 @@ export default function DashboardPage() {
     }
   }
 
+  const handleCreateCategory = async () => {
+    if (!categoryName.trim()) return
+
+    const token = localStorage.getItem('token')
+
+    try {
+      setSaving(true)
+      const response = await fetch('/api/categories', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: categoryName,
+          icon: categoryIcon,
+          color: categoryColor
+        })
+      })
+
+      if (response.ok) {
+        setCategoryName('')
+        setCategoryIcon('📊')
+        setCategoryColor('#3B82F6')
+        setSavingCategory(false)
+        setShowCategoryForm(false)
+        loadData(token!)
+      } else {
+        const error = await response.json()
+        alert(error.error || 'Gagal membuat kategori')
+      }
+    } catch (error) {
+      console.error('Error creating category:', error)
+      alert('Gagal membuat kategori')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleAIAnalysis = async () => {
     setLoadingAnalysis(true)
     setShowAIAnalysis(true)
@@ -240,6 +389,145 @@ export default function DashboardPage() {
       console.error('Error exporting to Excel:', error)
       alert('❌ Terjadi kesalahan saat mengekspor data')
     }
+  }
+
+  const handleCreateBudget = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!budgetName || !totalBudget || !budgetStartDate || !budgetEndDate) {
+      alert('Mohon lengkapi semua field yang wajib')
+      return
+    }
+    
+    setSavingsBudget(true)
+    const token = localStorage.getItem('token')
+
+    try {
+      const allocations = Object.entries(budgetAllocations)
+        .filter(([_, amount]) => amount && parseFloat(amount) > 0)
+        .map(([categoryId, amount]) => ({
+          categoryId,
+          amount: parseFormattedNumber(amount)
+        }))
+
+      const response = await fetch('/api/budget/periods', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: budgetName,
+          totalBudget: parseFormattedNumber(totalBudget),
+          startDate: budgetStartDate,
+          endDate: budgetEndDate,
+          allocations
+        })
+      })
+
+      if (response.ok) {
+        setBudgetName('')
+        setTotalBudget('')
+        setBudgetStartDate('')
+        setBudgetEndDate('')
+        setBudgetAllocations({})
+        setShowBudgetForm(false)
+        loadData(token!)
+        alert('✅ Budget periode berhasil dibuat!')
+      } else {
+        const error = await response.json()
+        alert(`❌ ${error.error || 'Gagal membuat budget'}`)
+      }
+    } catch (error) {
+      console.error('Error creating budget:', error)
+      alert('❌ Terjadi kesalahan saat membuat budget')
+    } finally {
+      setSavingsBudget(false)
+    }
+  }
+
+  const handleEditBudget = () => {
+    if (!budgetStatus?.period) return
+    
+    // Populate form with current budget data
+    setBudgetName(budgetStatus.period.name)
+    setTotalBudget(formatNumber(budgetStatus.period.totalBudget.toString()))
+    setBudgetStartDate(new Date(budgetStatus.period.startDate).toISOString().split('T')[0])
+    setBudgetEndDate(new Date(budgetStatus.period.endDate).toISOString().split('T')[0])
+    setEditingBudgetId(budgetStatus.period.id)
+    
+    // Populate current allocations
+    const currentAllocations: {[categoryId: string]: string} = {}
+    budgetStatus.categories.forEach(cat => {
+      if (cat.allocatedAmount > 0) {
+        currentAllocations[cat.category.id] = formatNumber(cat.allocatedAmount.toString())
+      }
+    })
+    setBudgetAllocations(currentAllocations)
+    
+    setShowEditBudgetForm(true)
+  }
+
+  const handleUpdateBudget = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!budgetName || !totalBudget || !budgetStartDate || !budgetEndDate) {
+      alert('Mohon lengkapi semua field yang wajib')
+      return
+    }
+    
+    setSavingsBudget(true)
+    const token = localStorage.getItem('token')
+
+    try {
+      const allocations = Object.entries(budgetAllocations)
+        .filter(([_, amount]) => amount && parseFloat(amount) > 0)
+        .map(([categoryId, amount]) => ({
+          categoryId,
+          amount: parseFormattedNumber(amount)
+        }))
+
+      const response = await fetch(`/api/budget/periods/${editingBudgetId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: budgetName,
+          totalBudget: parseFormattedNumber(totalBudget),
+          startDate: budgetStartDate,
+          endDate: budgetEndDate,
+          allocations
+        })
+      })
+
+      if (response.ok) {
+        setBudgetName('')
+        setTotalBudget('')
+        setBudgetStartDate('')
+        setBudgetEndDate('')
+        setBudgetAllocations({})
+        setShowEditBudgetForm(false)
+        setEditingBudgetId('')
+        loadData(token!)
+        alert('✅ Budget periode berhasil diperbarui!')
+      } else {
+        const error = await response.json()
+        alert(`❌ ${error.error || 'Gagal memperbarui budget'}`)
+      }
+    } catch (error) {
+      console.error('Error updating budget:', error)
+      alert('❌ Terjadi kesalahan saat memperbarui budget')
+    } finally {
+      setSavingsBudget(false)
+    }
+  }
+
+  const handleBudgetAllocationChange = (categoryId: string, value: string) => {
+    const formatted = formatNumber(value)
+    setBudgetAllocations(prev => ({
+      ...prev,
+      [categoryId]: formatted
+    }))
   }
 
   const totalExpenses = Array.isArray(expenses) ? expenses.reduce((sum, expense) => sum + expense.amount, 0) : 0
@@ -387,7 +675,7 @@ export default function DashboardPage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-6 sm:mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 lg:gap-6 mb-6 sm:mb-8">
           {/* Total Pengeluaran */}
           <div className="bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 lg:p-6 shadow-sm border">
             <div className="flex items-start justify-between">
@@ -430,16 +718,45 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Kategori Aktif */}
+          {/* Budget Status */}
           <div className="bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 lg:p-6 shadow-sm border">
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
-                <p className="text-xs sm:text-sm font-medium text-gray-600 mb-1">Kategori Aktif</p>
-                <p className="text-sm sm:text-lg lg:text-2xl font-bold text-gray-900 mb-1">{activeCategories}</p>
-                <p className="text-xs text-gray-500">Kategori digunakan</p>
+                <p className="text-xs sm:text-sm font-medium text-gray-600 mb-1">Budget Bulan Ini</p>
+                {budgetStatus ? (
+                  <>
+                    <p className="text-sm sm:text-lg lg:text-2xl font-bold text-gray-900 mb-1 truncate">
+                      {formatCurrency(budgetStatus.summary.totalRemaining)}
+                    </p>
+                    <p className="text-xs text-blue-600">
+                      {budgetStatus.summary.percentageUsed.toFixed(0)}% terpakai
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm sm:text-lg lg:text-2xl font-bold text-gray-500 mb-1">-</p>
+                    <p className="text-xs text-gray-500">Belum ada budget</p>
+                  </>
+                )}
               </div>
               <div className="w-6 h-6 sm:w-8 sm:h-8 lg:w-12 lg:h-12 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0 ml-2">
                 <PieChart className="w-3 h-3 sm:w-4 sm:h-4 lg:w-6 lg:h-6 text-purple-600" />
+              </div>
+            </div>
+          </div>
+
+          {/* Tabungan */}
+          <div className="bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 lg:p-6 shadow-sm border">
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-gray-600 mb-1">Total Tabungan</p>
+                <p className="text-sm sm:text-lg lg:text-2xl font-bold text-gray-900 mb-1 truncate">
+                  {formatCurrency(savings?.totalAmount || 0)}
+                </p>
+                <p className="text-xs text-green-600">Dari sisa budget</p>
+              </div>
+              <div className="w-6 h-6 sm:w-8 sm:h-8 lg:w-12 lg:h-12 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0 ml-2">
+                <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 lg:w-6 lg:h-6 text-emerald-600" />
               </div>
             </div>
           </div>
@@ -574,13 +891,31 @@ export default function DashboardPage() {
         </div>
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6 sm:mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6 sm:mb-8">
           <button
             onClick={() => setShowAddForm(true)}
             className="flex items-center justify-center bg-blue-600 text-white px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg hover:bg-blue-700 transition font-medium text-xs sm:text-sm"
           >
             <Plus size={16} className="mr-1.5" />
             Tambah Pengeluaran
+          </button>
+          
+          <button
+            onClick={() => setShowBudgetTab(!showBudgetTab)}
+            className={`flex items-center justify-center px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg transition font-medium text-xs sm:text-sm ${
+              budgetStatus ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+            }`}
+          >
+            <PieChart size={16} className="mr-1.5" />
+            {budgetStatus ? 'Budget' : 'Setup Budget'}
+          </button>
+
+          <button
+            onClick={() => setShowBudgetForm(true)}
+            className="flex items-center justify-center bg-orange-600 text-white px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg hover:bg-orange-700 transition font-medium text-xs sm:text-sm"
+          >
+            <Plus size={16} className="mr-1.5" />
+            Periode Baru
           </button>
           
           <button
@@ -612,6 +947,131 @@ export default function DashboardPage() {
             ))}
           </select>
         </div>
+
+        {/* Budget Management Section */}
+        {showBudgetTab && (
+          <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-sm border mb-6 sm:mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900">💳 Budget Management</h3>
+              {budgetStatus && (
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-600">
+                    {budgetStatus.period.name}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {new Date(budgetStatus.period.startDate).toLocaleDateString('id-ID')} - {new Date(budgetStatus.period.endDate).toLocaleDateString('id-ID')}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {budgetStatus ? (
+              <div className="space-y-6">
+                {/* Budget Summary */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-blue-600">Total Budget</p>
+                    <p className="text-2xl font-bold text-blue-900">
+                      {formatCurrency(budgetStatus.summary.totalBudget)}
+                    </p>
+                  </div>
+                  <div className="bg-orange-50 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-orange-600">Terpakai</p>
+                    <p className="text-2xl font-bold text-orange-900">
+                      {formatCurrency(budgetStatus.summary.totalSpent)}
+                    </p>
+                    <p className="text-sm text-orange-600">
+                      {budgetStatus.summary.percentageUsed.toFixed(1)}%
+                    </p>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-green-600">Sisa</p>
+                    <p className="text-2xl font-bold text-green-900">
+                      {formatCurrency(budgetStatus.summary.totalRemaining)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Budget Categories */}
+                <div className="space-y-3">
+                  <h4 className="text-md font-semibold text-gray-900">Alokasi per Kategori</h4>
+                  {budgetStatus.categories.map((categoryBudget) => {
+                    const percentage = categoryBudget.allocatedAmount > 0 ? 
+                      (categoryBudget.spentAmount / categoryBudget.allocatedAmount) * 100 : 0
+                    const isNearLimit = percentage >= 80
+                    const isOverBudget = categoryBudget.isOverBudget
+
+                    return (
+                      <div key={categoryBudget.id} className="bg-gray-50 p-4 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-lg">{categoryBudget.category.icon}</span>
+                            <span className="font-medium text-gray-900">
+                              {categoryBudget.category.name}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-gray-900">
+                              {formatCurrency(categoryBudget.spentAmount)} / {formatCurrency(categoryBudget.allocatedAmount)}
+                            </p>
+                            <p className={`text-xs ${
+                              isOverBudget ? 'text-red-600' : 
+                              isNearLimit ? 'text-orange-600' : 'text-green-600'
+                            }`}>
+                              Sisa: {formatCurrency(categoryBudget.remainingAmount)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full transition-all duration-300 ${
+                              isOverBudget ? 'bg-red-500' :
+                              isNearLimit ? 'bg-orange-500' : 'bg-green-500'
+                            }`}
+                            style={{ width: `${Math.min(percentage, 100)}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {percentage.toFixed(1)}% digunakan
+                          {isOverBudget && ' - OVER BUDGET!'}
+                          {isNearLimit && !isOverBudget && ' - Hampir habis'}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Quick Actions */}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setShowBudgetForm(true)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+                  >
+                    Periode Budget Baru
+                  </button>
+                  <button
+                    onClick={handleEditBudget}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm"
+                  >
+                    Edit Budget
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-gray-500 mb-4">
+                  Belum ada budget periode aktif. Buat budget bulanan Anda untuk tracking pengeluaran yang lebih baik!
+                </p>
+                <button
+                  onClick={() => setShowBudgetForm(true)}
+                  className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-medium"
+                >
+                  Buat Budget Periode Pertama
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Add Expense Form Modal */}
         {showAddForm && (
@@ -740,6 +1200,359 @@ export default function DashboardPage() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Budget Form Modal */}
+        {showBudgetForm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-3 sm:p-4 z-50">
+            <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 max-w-lg w-full mx-3 max-h-[90vh] overflow-y-auto">
+              <h3 className="text-lg sm:text-xl font-bold mb-4">Buat Periode Budget Baru</h3>
+              <form onSubmit={handleCreateBudget} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Nama Periode <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={budgetName}
+                    onChange={(e) => setBudgetName(e.target.value)}
+                    placeholder="contoh: November 2024"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Total Budget <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={totalBudget}
+                    onChange={(e) => setTotalBudget(formatNumber(e.target.value))}
+                    placeholder="5,600,000"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Total uang bulanan yang diberikan orang tua
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Tanggal Mulai <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={budgetStartDate}
+                      onChange={(e) => setBudgetStartDate(e.target.value)}
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Tanggal Berakhir <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={budgetEndDate}
+                      onChange={(e) => setBudgetEndDate(e.target.value)}
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Alokasi Budget per Kategori
+                  </label>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Atur berapa budget untuk setiap kategori pengeluaran (opsional)
+                  </p>
+                  <div className="space-y-3 max-h-60 overflow-y-auto">
+                    {categories.map((category) => (
+                      <div key={category.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                        <span className="text-lg">{category.icon}</span>
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900">{category.name}</p>
+                        </div>
+                        <input
+                          type="text"
+                          value={budgetAllocations[category.id] || ''}
+                          onChange={(e) => handleBudgetAllocationChange(category.id, e.target.value)}
+                          placeholder="0"
+                          className="w-24 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between items-center mt-3">
+                    <p className="text-xs text-gray-500">
+                      Kategori yang tidak diisi akan menggunakan alokasi fleksibel
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowCategoryForm(true)}
+                      className="text-xs text-purple-600 hover:text-purple-700 font-medium"
+                    >
+                      + Buat Kategori Baru
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowBudgetForm(false)
+                      setBudgetName('')
+                      setTotalBudget('')
+                      setBudgetStartDate('')
+                      setBudgetEndDate('')
+                      setBudgetAllocations({})
+                    }}
+                    className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingsBudget}
+                    className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    {savingsBudget ? 'Membuat...' : 'Buat Budget'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Budget Form Modal */}
+        {showEditBudgetForm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
+            <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 max-w-lg w-full mx-3 my-4">
+              <h3 className="text-lg sm:text-xl font-bold mb-4 text-black">Edit Budget Periode</h3>
+              <form onSubmit={handleUpdateBudget} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Nama Budget <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={budgetName}
+                    onChange={(e) => setBudgetName(e.target.value)}
+                    placeholder="Budget Bulanan Januari 2025"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Total Budget <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={totalBudget}
+                    onChange={(e) => setTotalBudget(formatNumber(e.target.value))}
+                    placeholder="5,600,000"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Total uang bulanan yang diberikan orang tua
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Tanggal Mulai <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={budgetStartDate}
+                      onChange={(e) => setBudgetStartDate(e.target.value)}
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Tanggal Berakhir <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={budgetEndDate}
+                      onChange={(e) => setBudgetEndDate(e.target.value)}
+                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Alokasi Budget per Kategori
+                  </label>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Atur berapa budget untuk setiap kategori pengeluaran (opsional)
+                  </p>
+                  <div className="space-y-3 max-h-60 overflow-y-auto">
+                    {categories.map((category) => (
+                      <div key={category.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                        <span className="text-lg">{category.icon}</span>
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900">{category.name}</p>
+                        </div>
+                        <input
+                          type="text"
+                          value={budgetAllocations[category.id] || ''}
+                          onChange={(e) => handleBudgetAllocationChange(category.id, e.target.value)}
+                          placeholder="0"
+                          className="w-24 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between items-center mt-3">
+                    <p className="text-xs text-gray-500">
+                      Kategori yang tidak diisi akan menggunakan alokasi fleksibel
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowCategoryForm(true)}
+                      className="text-xs text-purple-600 hover:text-purple-700 font-medium"
+                    >
+                      + Buat Kategori Baru
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditBudgetForm(false)
+                      setBudgetName('')
+                      setTotalBudget('')
+                      setBudgetStartDate('')
+                      setBudgetEndDate('')
+                      setBudgetAllocations({})
+                      setEditingBudgetId('')
+                    }}
+                    className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingsBudget}
+                    className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    {savingsBudget ? 'Memperbarui...' : 'Perbarui Budget'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Category Creation Modal */}
+        {showCategoryForm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-md w-full p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Buat Kategori Baru</h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Nama Kategori <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={categoryName}
+                    onChange={(e) => setCategoryName(e.target.value)}
+                    placeholder="Masukkan nama kategori"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Icon
+                  </label>
+                  <div className="grid grid-cols-6 gap-2">
+                    {['📊', '🍽️', '🚗', '🏠', '🛍️', '💊', '📚', '🎮', '✈️', '💰', '⚡', '📱'].map((icon) => (
+                      <button
+                        key={icon}
+                        type="button"
+                        onClick={() => setCategoryIcon(icon)}
+                        className={`p-2 text-lg rounded-lg border-2 transition ${
+                          categoryIcon === icon 
+                            ? 'border-purple-500 bg-purple-50' 
+                            : 'border-gray-300 hover:border-gray-400'
+                        }`}
+                      >
+                        {icon}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Warna
+                  </label>
+                  <div className="grid grid-cols-6 gap-2">
+                    {['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#6B7280', '#F97316', '#06B6D4', '#84CC16', '#F43F5E', '#8B5A2B'].map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => setCategoryColor(color)}
+                        className={`w-8 h-8 rounded-lg border-2 transition ${
+                          categoryColor === color 
+                            ? 'border-gray-900 scale-110' 
+                            : 'border-gray-300 hover:border-gray-400'
+                        }`}
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCategoryForm(false)
+                      setCategoryName('')
+                      setCategoryIcon('📊')
+                      setCategoryColor('#3B82F6')
+                      setSavingCategory(false)
+                    }}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCreateCategory}
+                    disabled={saving || !categoryName.trim()}
+                    className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? 'Membuat...' : 'Buat Kategori'}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

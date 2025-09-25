@@ -46,6 +46,67 @@ function getCategoryColor(category: string): string {
   return colorMap[category] || '#64748B'
 }
 
+// Helper function to check budget before creating expense
+async function checkBudgetOverrun(prisma: PrismaClient, userId: string, categoryId: string, amount: number) {
+  const activePeriod = await prisma.budgetPeriod.findFirst({
+    where: {
+      userId,
+      isActive: true
+    },
+    include: {
+      budgetAllocations: {
+        where: { categoryId },
+        include: { category: true }
+      }
+    }
+  })
+
+  if (!activePeriod || activePeriod.budgetAllocations.length === 0) {
+    return null // No budget set, allow expense
+  }
+
+  const allocation = activePeriod.budgetAllocations[0]
+  const remainingBudget = allocation.allocatedAmount - allocation.spentAmount
+  const willExceedBudget = amount > remainingBudget
+  const overrunAmount = amount - remainingBudget
+
+  if (willExceedBudget) {
+    const overrunPercentage = (overrunAmount / remainingBudget) * 100
+    return {
+      categoryName: allocation.category.name,
+      categoryIcon: allocation.category.icon,
+      allocatedAmount: allocation.allocatedAmount,
+      spentAmount: allocation.spentAmount,
+      remainingBudget,
+      overrunAmount,
+      overrunPercentage,
+      willExceedBudget: true,
+      warningMessage: `🚨 *PERINGATAN ANGGARAN MELEBIHI BATAS!*
+
+💰 *Kategori:* ${allocation.category.icon} ${allocation.category.name}
+📊 *Detail Anggaran:*
+• Anggaran: Rp ${allocation.allocatedAmount.toLocaleString('id-ID')}
+• Terpakai: Rp ${allocation.spentAmount.toLocaleString('id-ID')}
+• Sisa: Rp ${remainingBudget.toLocaleString('id-ID')}
+
+⚠️ *Pengeluaran ini akan melebihi anggaran sebesar:*
+• Kelebihan: Rp ${overrunAmount.toLocaleString('id-ID')}
+• Persentase kelebihan: ${overrunPercentage.toFixed(1)}%
+
+💡 *Saran:*
+1. Kurangi jumlah pengeluaran
+2. Pilih kategori lain
+3. Atau lanjutkan dengan risiko melebihi anggaran
+
+⚠️ *Jika tetap dilanjutkan, pengeluaran akan ditandai sebagai "OVERLOAD BUDGET".*
+
+Ketik "ya" untuk tetap lanjutkan atau "tidak" untuk batalkan.`
+    }
+  }
+
+  return null // Budget is fine
+}
+
 export async function POST(request: NextRequest) {
   // Use direct connection (not pooled) to avoid prepared statement conflicts in serverless
   const prisma = new PrismaClient({
@@ -108,7 +169,9 @@ Ketik: /reset
 📊 /analisis - Analisis AI pengeluaran bulanan
 📊 /analisis minggu - Analisis mingguan
 💰 /saldo - Total pengeluaran hari ini
-📤 /export - Export data ke Excel (segera)
+� /budget - Status budget saat ini
+💰 /tabungan - Total tabungan dari sisa budget
+�📤 /export - Export data ke Excel (segera)
 🔓 /logout - Keluar dari bot
 🔄 /reset - Reset dan login ulang
 ℹ️ /info - Tampilkan panduan ini
@@ -219,7 +282,9 @@ Sekarang Anda bisa:
 📊 /analisis - Analisis AI pengeluaran bulanan
 📊 /analisis minggu - Analisis mingguan
 💰 /saldo - Total pengeluaran hari ini
-📤 /export - Export data ke Excel (segera)
+� /budget - Status budget saat ini
+💰 /tabungan - Total tabungan dari sisa budget
+�📤 /export - Export data ke Excel (segera)
 🔓 /logout - Keluar dari bot
 🔄 /reset - Reset dan login ulang
 ℹ️ /info - Tampilkan panduan ini`
@@ -390,6 +455,300 @@ ${todayExpenses.map(exp => `• ${exp.description}: Rp ${exp.amount.toLocaleStri
       }
     }
 
+    // Handle budget status command with AI insights
+    if (text === '/budget') {
+      try {
+        const decoded = jwt.verify(telegramUser.token, process.env.JWT_SECRET!) as any
+        
+        // Get active budget period
+        const activePeriod = await prisma.budgetPeriod.findFirst({
+          where: {
+            userId: decoded.userId,
+            isActive: true
+          },
+          include: {
+            budgetAllocations: {
+              include: {
+                category: true
+              }
+            }
+          }
+        })
+
+        if (!activePeriod) {
+          return NextResponse.json({
+            method: 'sendMessage',
+            chat_id: chatId,
+            text: `💳 *Budget Status*
+
+❌ Belum ada periode budget aktif.
+
+📋 Untuk mengatur budget bulanan, silakan kunjungi dashboard:
+🌐 https://cash-gram-web-app.vercel.app/dashboard
+
+💡 Di dashboard Anda bisa:
+• Set budget bulanan (misal 5.6jt)
+• Alokasi per kategori (listrik 300rb, laundry 200rb, dll)
+• Track sisa budget real-time
+
+💰 Tips: Budget yang baik membantu kontrol pengeluaran dan menambah tabungan otomatis dari sisa budget!`,
+            parse_mode: 'Markdown'
+          })
+        }
+
+        const totalAllocated = activePeriod.budgetAllocations.reduce(
+          (sum, allocation) => sum + allocation.allocatedAmount, 0
+        )
+        
+        const totalSpent = activePeriod.budgetAllocations.reduce(
+          (sum, allocation) => sum + allocation.spentAmount, 0
+        )
+
+        const budgetSummary = activePeriod.budgetAllocations.map(allocation => {
+          const remaining = allocation.allocatedAmount - allocation.spentAmount
+          const percentage = allocation.allocatedAmount > 0 ? 
+            (allocation.spentAmount / allocation.allocatedAmount) * 100 : 0
+          
+          let icon = '✅'
+          let statusText = 'Aman'
+          if (remaining < 0) {
+            icon = '❌'
+            statusText = 'OVER BUDGET'
+          } else if (percentage >= 80) {
+            icon = '⚠️' 
+            statusText = 'Hampir habis'
+          } else if (percentage >= 50) {
+            icon = '🟡'
+            statusText = 'Setengah terpakai'
+          }
+          
+          return `${icon} ${getCategoryIcon(allocation.category.name)} *${allocation.category.name}* (${statusText})
+   💰 Rp ${allocation.spentAmount.toLocaleString('id-ID')} / Rp ${allocation.allocatedAmount.toLocaleString('id-ID')}
+   💵 Sisa: Rp ${remaining.toLocaleString('id-ID')} (${Math.max(0, 100-percentage).toFixed(0)}%)`
+        }).join('\n\n')
+
+        // Calculate days remaining in period
+        const endDate = new Date(activePeriod.endDate)
+        const today = new Date()
+        const daysRemaining = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+        
+        // Generate AI recommendation (simple logic for now, can be enhanced with Gemini later)
+        let recommendation = ''
+        const remainingTotal = activePeriod.totalBudget - totalSpent
+        const dailyBudgetLeft = daysRemaining > 0 ? remainingTotal / daysRemaining : 0
+        
+        if (remainingTotal < 0) {
+          recommendation = `\n🤖 *AI Saran:*\n⚠️ Anda sudah over budget Rp ${Math.abs(remainingTotal).toLocaleString('id-ID')}. Pertimbangkan untuk mengurangi pengeluaran atau gunakan tabungan.`
+        } else if (daysRemaining > 0 && dailyBudgetLeft < 100000) {
+          recommendation = `\n🤖 *AI Saran:*\n💡 Sisa budget harian: Rp ${dailyBudgetLeft.toLocaleString('id-ID')}. Fokus pada kebutuhan pokok dan hindari impulse buying.`
+        } else if (remainingTotal > activePeriod.totalBudget * 0.5) {
+          recommendation = `\n🤖 *AI Saran:*\n✅ Budget masih aman! Pertimbangkan untuk menabung sebagian atau investasi untuk masa depan.`
+        }
+
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: `💳 *Budget ${activePeriod.name}*
+📅 ${new Date(activePeriod.startDate).toLocaleDateString('id-ID')} - ${new Date(activePeriod.endDate).toLocaleDateString('id-ID')} (${daysRemaining} hari lagi)
+
+📊 *RINGKASAN BUDGET*
+💰 Total Budget: Rp ${activePeriod.totalBudget.toLocaleString('id-ID')}
+� Terpakai: Rp ${totalSpent.toLocaleString('id-ID')} (${((totalSpent/activePeriod.totalBudget)*100).toFixed(1)}%)
+� Sisa: Rp ${(activePeriod.totalBudget - totalSpent).toLocaleString('id-ID')}
+
+📋 *DETAIL PER KATEGORI*
+${budgetSummary}${recommendation}
+
+💡 Gunakan format "beli listrik 300rb" untuk expense dengan budget tracking otomatis!`,
+          parse_mode: 'Markdown'
+        })
+      } catch (error) {
+        console.error('Budget status error:', error)
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: '❌ Gagal mengambil status budget. Coba lagi nanti.'
+        })
+      }
+    }
+
+    // Handle savings command
+    if (text === '/tabungan') {
+      try {
+        const decoded = jwt.verify(telegramUser.token, process.env.JWT_SECRET!) as any
+        
+        const savings = await prisma.savings.findMany({
+          where: { userId: decoded.userId },
+          orderBy: { createdAt: 'desc' },
+          take: 10
+        })
+
+        const totalSavings = await prisma.savings.aggregate({
+          where: { userId: decoded.userId },
+          _sum: { amount: true }
+        })
+
+        if (savings.length === 0) {
+          return NextResponse.json({
+            method: 'sendMessage',
+            chat_id: chatId,
+            text: `💰 *Tabungan Saya*
+
+🏦 Total Tabungan: Rp 0
+
+❌ Belum ada tabungan dari sisa budget.
+
+💡 *Cara kerja tabungan:*
+• Setiap akhir periode budget, sisa budget otomatis masuk ke tabungan
+• Misal budget 5.6jt, terpakai 5.2jt → Tabungan +400rb
+• Tabungan terakumulasi setiap bulan
+
+📋 Atur budget bulanan di:
+🌐 https://cash-gram-web-app.vercel.app/dashboard`
+          })
+        }
+
+        const savingsDetail = savings.map(saving => 
+          `💰 Rp ${saving.amount.toLocaleString('id-ID')}
+📅 ${new Date(saving.createdAt).toLocaleDateString('id-ID')}
+📝 ${saving.description}`
+        ).join('\n\n')
+
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: `💰 *Tabungan Saya*
+
+🏦 Total Tabungan: Rp ${(totalSavings._sum.amount || 0).toLocaleString('id-ID')}
+
+📋 *Riwayat Tabungan:*
+${savingsDetail}
+
+💡 Tabungan akan bertambah otomatis setiap akhir periode budget dari sisa budget yang tidak terpakai!`,
+          parse_mode: 'Markdown'
+        })
+      } catch (error) {
+        console.error('Savings error:', error)
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: '❌ Gagal mengambil data tabungan. Coba lagi nanti.'
+        })
+      }
+    }
+
+    // Handle category selection for expense confirmation
+    if (text.match(/^\/[✅⚠️📂]_/)) {
+      try {
+        const decoded = jwt.verify(telegramUser.token, process.env.JWT_SECRET!) as any
+        const parts = text.split('_')
+        
+        if (parts.length < 5) {
+          return NextResponse.json({
+            method: 'sendMessage',
+            chat_id: chatId,
+            text: '❌ Data tidak lengkap. Silakan ulangi input pengeluaran.'
+          })
+        }
+
+        const categoryId = parts[1]
+        const amount = parseInt(parts[2])
+        const description = decodeURIComponent(parts[3])
+        
+        // Get category info
+        const category = await prisma.category.findUnique({
+          where: { id: categoryId }
+        })
+
+        if (!category) {
+          return NextResponse.json({
+            method: 'sendMessage',
+            chat_id: chatId,
+            text: '❌ Kategori tidak ditemukan.'
+          })
+        }
+
+        // Check current budget status
+        const activePeriod = await prisma.budgetPeriod.findFirst({
+          where: {
+            userId: decoded.userId,
+            isActive: true
+          },
+          include: {
+            budgetAllocations: {
+              where: { categoryId: categoryId },
+              include: { category: true }
+            }
+          }
+        })
+
+        let budgetMessage = ''
+        let budgetWarning = ''
+
+        if (activePeriod && activePeriod.budgetAllocations.length > 0) {
+          const allocation = activePeriod.budgetAllocations[0]
+          const remainingBefore = allocation.allocatedAmount - allocation.spentAmount
+          const remainingAfter = remainingBefore - amount
+          
+          if (remainingAfter < 0) {
+            budgetWarning = `⚠️ *PERINGATAN BUDGET!*\nBudget ${category.name} tersisa: Rp ${remainingBefore.toLocaleString('id-ID')}\nPengeluaran ini: Rp ${amount.toLocaleString('id-ID')}\n\nAnda akan *OVER BUDGET* sebesar Rp ${Math.abs(remainingAfter).toLocaleString('id-ID')}!\n\n`
+            budgetMessage = `\n💳 *Budget Update:*\n❌ ${category.name}: OVER BUDGET!\n💰 Budget: Rp ${allocation.allocatedAmount.toLocaleString('id-ID')}\n💸 Total terpakai: Rp ${(allocation.spentAmount + amount).toLocaleString('id-ID')}\n⚠️ Kelebihan: Rp ${Math.abs(remainingAfter).toLocaleString('id-ID')}`
+          } else {
+            budgetMessage = `\n💳 *Budget Update:*\n✅ Budget ${category.name} masih mencukupi\n💰 Budget: Rp ${allocation.allocatedAmount.toLocaleString('id-ID')}\n💸 Terpakai: Rp ${(allocation.spentAmount + amount).toLocaleString('id-ID')}\n💵 Sisa: Rp ${remainingAfter.toLocaleString('id-ID')}`
+          }
+
+          // Update budget allocation spent amount
+          await prisma.budgetAllocation.update({
+            where: { id: allocation.id },
+            data: {
+              spentAmount: allocation.spentAmount + amount
+            }
+          })
+        } else {
+          budgetMessage = `\n💡 *Catatan:* Kategori ${category.name} belum memiliki alokasi budget.`
+        }
+
+        // Create the expense
+        const expense = await prisma.expense.create({
+          data: {
+            amount: amount,
+            description: description,
+            categoryId: categoryId,
+            userId: decoded.userId,
+            date: new Date()
+          },
+          include: { category: true }
+        })
+
+        const successMessage = `${budgetWarning}✅ *Pengeluaran Berhasil Dicatat!*
+
+💰 Jumlah: Rp ${expense.amount.toLocaleString('id-ID')}
+📝 Deskripsi: ${expense.description}
+📂 Kategori: ${getCategoryIcon(expense.category.name)} ${expense.category.name}
+📅 ${expense.date.toLocaleDateString('id-ID')}${budgetMessage}
+
+💡 *Fitur lainnya:*
+💳 /budget - Cek sisa budget
+💰 /saldo - Total hari ini
+📊 /analisis - AI analisis pengeluaran`
+
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: successMessage,
+          parse_mode: 'Markdown'
+        })
+
+      } catch (error) {
+        console.error('Confirm expense error:', error)
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: '❌ Gagal menyimpan pengeluaran. Silakan coba lagi.'
+        })
+      }
+    }
+
     // Handle logout command
     if (text === '/logout') {
       try {
@@ -426,34 +785,52 @@ Ketik /start untuk login kembali.`
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
-        text: `ℹ️ *Panduan Lengkap CashGram Bot*
+        text: `ℹ️ *CashGram Bot - Budget Smart Assistant*
 
-📝 *CATAT PENGELUARAN:*
-• Format: "[item] [jumlah]"
-• Contoh: "nasi goreng 20rb"
-• Multiple: "nasi goreng 20rb dan es teh 5rb"
+📝 *CATAT PENGELUARAN (NEW UX!):*
+• Format: "[item] [jumlah]"  
+• Contoh: "beli listrik 300rb", "laundry baju 50rb"
+
+🎯 *SMART BUDGET FLOW:*
+1️⃣ Anda: "beli listrik 300rb"
+2️⃣ Bot: "Anda pakai uang dari kategori mana?" + tampilkan pilihan dengan info budget
+3️⃣ Anda: Pilih kategori (contoh: klik ✅ Listrik (Sisa: Rp 200,000))
+4️⃣ Bot: Simpan expense + cek budget + beri insight & saran AI
 
 🤖 *PERINTAH BOT:*
-📊 /analisis - Analisis AI pengeluaran bulanan
+💳 /budget - Status budget real-time + AI insights & rekomendasi
+� /tabungan - Total tabungan dari sisa budget periode lalu
+💰 /saldo - Pengeluaran hari ini
+📊 /analisis - AI analisis pengeluaran bulanan  
 📊 /analisis minggu - Analisis mingguan
-💰 /saldo - Total pengeluaran hari ini
-📤 /export - Export data ke Excel (segera)
+📤 /export - Export data ke Excel
 🔓 /logout - Keluar dari bot
 🔄 /reset - Reset dan login ulang
-ℹ️ /info - Tampilkan panduan ini
+
+💡 *FITUR BUDGET SMART:*
+✅ Real-time budget checking sebelum expense
+⚠️ Smart warning jika akan over budget
+🤖 AI insights & saran berdasarkan spending pattern
+💰 Auto-save sisa budget ke tabungan setiap akhir periode
+📈 Visual progress tracking per kategori
+🎯 Intelligent categorization dengan AI
 
 🌐 *DASHBOARD WEB:*
-Akses lengkap: cash-gram-web-app.vercel.app
-• Lihat grafik pengeluaran
-• Analisis mendalam
-• Export data Excel
+${process.env.NEXT_PUBLIC_APP_URL || 'https://cash-gram-web-app.vercel.app'}
+• Setup & manage budget bulanan (5.6jt → alokasi per kategori)
+• Visual analytics & charts
+• Historical data & trends
+• Export laporan detail
 
-💡 *TIPS:*
-• Bot mendukup bahasa Indonesia
-• Otomatis kategorisasi pengeluaran
-• AI analisis pola spending Anda
+� *MENGAPA CASHGRAM?*
+• 📊 Budget control yang intelligent
+• 🤖 AI-powered expense categorization
+• 💡 Financial insights & recommendations  
+• 💰 Automatic savings from leftover budget
+• 📱 Seamless sync antara bot & web dashboard
+• 📈 Real-time spending tracking & alerts
 
-📱 Developed by CashGram Team`,
+Mulai dengan: "beli [item] [jumlah]rb" untuk experience budget smart! 💪`,
         parse_mode: 'Markdown'
       })
     }
@@ -691,72 +1068,95 @@ ${expenseList}
           }
         }
         
-        // If all parsing failed, show error message
+        // If all parsing failed, show error message with better guidance
         return NextResponse.json({
           method: 'sendMessage',
           chat_id: chatId,
-          text: `❓ Maaf, saya tidak bisa memahami input "${text}".
-
-Contoh format yang benar:
-• "nasi goreng 20rb"
-• "ojek ke mall 15k" 
-• "beli pulsa 50 ribu"
-• "saya makan ayam 25 rb dan saya beli aqua 10 rb"
-
-Atau gunakan command:
-/analisis minggu - Analisis minggu ini
-/saldo - Cek pengeluaran hari ini
-/info - Tampilkan panduan lengkap`
+          text: `❓ Tidak dapat memahami format pengeluaran.\n\n💡 Contoh format yang benar:\n• "beli listrik 300rb"\n• "laundry baju 50rb"\n• "makan siang 25rb"\n\nAtau gunakan /info untuk panduan lengkap.`
         })
       }
 
-      // Process single expense (if parsing was successful with good confidence)
+      // NEW UX FLOW: Show category selection instead of direct save
       const decoded = jwt.verify(telegramUser.token, process.env.JWT_SECRET!) as any
-      let category = await prisma.category.findFirst({
-        where: { 
-          name: parsed.category || 'Lainnya',
-          userId: decoded.userId 
-        }
+      
+      // Get user categories
+      const categories = await prisma.category.findMany({
+        where: { userId: decoded.userId }
       })
 
-      if (!category) {
-        category = await prisma.category.create({
-          data: {
-            name: parsed.category || 'Lainnya',
-            userId: decoded.userId
-          }
+      if (categories.length === 0) {
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: '❌ Anda belum memiliki kategori.\n\n📱 Silakan login ke dashboard terlebih dahulu untuk membuat kategori:\nhttps://cash-gram-web-app.vercel.app/dashboard'
         })
       }
 
-      // Create expense
-      const expense = await prisma.expense.create({
-        data: {
-          amount: parsed.amount,
-          description: parsed.description,
+      // Check if the amount seems reasonable
+      if (parsed.amount > 50000000) {
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: '❌ Jumlah terlalu besar. Silakan periksa kembali nominal yang Anda masukkan.'
+        })
+      }
+
+      // Get current budget period for showing remaining budget per category
+      const activePeriod = await prisma.budgetPeriod.findFirst({
+        where: {
           userId: decoded.userId,
-          categoryId: category.id,
-          date: new Date()
+          isActive: true
+        },
+        include: {
+          budgetAllocations: {
+            include: { category: true }
+          }
         }
       })
+
+      // Create category buttons with budget info and status
+      const categoryButtons = categories.map(category => {
+        let budgetInfo = ''
+        let status = '📂'
+        
+        if (activePeriod) {
+          const allocation = activePeriod.budgetAllocations.find(a => a.categoryId === category.id)
+          if (allocation) {
+            const remaining = allocation.allocatedAmount - allocation.spentAmount
+            if (remaining >= parsed.amount) {
+              status = '✅'
+              budgetInfo = ` (Sisa: Rp ${remaining.toLocaleString('id-ID')})`
+            } else if (remaining > 0) {
+              status = '⚠️'
+              budgetInfo = ` (Sisa: Rp ${remaining.toLocaleString('id-ID')} - OVER BUDGET!)`
+            } else {
+              status = '❌'
+              budgetInfo = ` (Budget habis - OVER BUDGET!)`
+            }
+          } else {
+            budgetInfo = ' (Tidak ada budget)'
+          }
+        }
+        
+        return `/${status}_${category.id}_${parsed.amount}_${encodeURIComponent(parsed.description)}_${Date.now()} ${getCategoryIcon(category.name)} ${category.name}${budgetInfo}`
+      }).join('\n')
 
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
-        text: `✅ *Pengeluaran berhasil dicatat!*
+        text: `💰 *Pengeluaran: Rp ${parsed.amount.toLocaleString('id-ID')}*
+� *Deskripsi:* ${parsed.description}
 
-💰 ${parsed.category} - ${parsed.description}
-💵 Rp ${parsed.amount.toLocaleString('id-ID')}
-📅 ${new Date().toLocaleDateString('id-ID', { 
-          timeZone: 'Asia/Makassar',
-          weekday: 'long', 
-          day: 'numeric', 
-          month: 'long' 
-        })}
+🎯 *Anda menggunakan uang dari kategori mana?*
+${categoryButtons}
 
-💡 *Fitur lainnya:*
-📊 /analisis - AI analisis pengeluaran
-💰 /saldo - Total pengeluaran hari ini  
-🌐 Dashboard: cash-gram-web-app.vercel.app`,
+💡 *Keterangan:*
+✅ Budget mencukupi
+⚠️ Akan over budget
+❌ Budget habis
+📂 Belum ada budget
+
+� *Tips:* Pilih kategori yang sesuai untuk tracking budget yang akurat!`,
         parse_mode: 'Markdown'
       })
 

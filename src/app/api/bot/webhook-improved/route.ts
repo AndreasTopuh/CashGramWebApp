@@ -57,12 +57,17 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Check if user is logged out (inactive) - allow only /start and /login commands
-    if (!telegramUser.isActive && messageText !== '/start' && !messageText.startsWith('/login')) {
+    // Check if user is logged out (inactive) - allow only specific commands
+    const allowedCommandsWhenLoggedOut = ['/start', '/login', '/checkdb', '/mystatus'];
+    const isCommandAllowed = allowedCommandsWhenLoggedOut.some(cmd => 
+      messageText === cmd || messageText.startsWith(cmd + ' ')
+    );
+    
+    if (!telegramUser.isActive && !isCommandAllowed) {
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
-        text: '🔐 *SILAKAN LOGIN TERLEBIH DAHULU*\n\nAnda sudah logout dari CashGram Bot.\n\n📱 *LOGIN:*\nKetik: `/login nomorhp password`\nContoh: `/login 081234567890 mypass`\n\n🆕 *ATAU DAFTAR BARU:*\nKetik: `/start` untuk panduan\n\nℹ️ Ketik /info tidak akan bekerja sampai login',
+        text: '🔐 *SILAKAN LOGIN TERLEBIH DAHULU*\n\nAnda sudah logout dari CashGram Bot.\n\n📱 *LOGIN:*\nKetik: `/login nomorhp password`\nContoh: `/login 081234567890 mypass`\n\n🔍 *DEBUG:*\nKetik: `/checkdb nomorhp` - cek data user\nKetik: `/mystatus` - cek status auth\n\n🆕 *ATAU DAFTAR BARU:*\nKetik: `/start` untuk panduan',
         parse_mode: 'Markdown'
       })
     }

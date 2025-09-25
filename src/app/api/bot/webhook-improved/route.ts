@@ -53,7 +53,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
-        text: '❌ User tidak ditemukan. Silakan daftar terlebih dahulu di web app.'
+        text: '❌ User tidak ditemukan. Silakan daftar terlebih dahulu di web app.\n\n💻 https://cash-gram-web-app.vercel.app'
+      })
+    }
+
+    // Check if user is logged out (inactive) - allow only /start and /login commands
+    if (!telegramUser.isActive && messageText !== '/start' && !messageText.startsWith('/login')) {
+      return NextResponse.json({
+        method: 'sendMessage',
+        chat_id: chatId,
+        text: '🔐 *SILAKAN LOGIN TERLEBIH DAHULU*\n\nAnda sudah logout dari CashGram Bot.\n\n📱 *LOGIN:*\nKetik: `/login nomorhp password`\nContoh: `/login 081234567890 mypass`\n\n🆕 *ATAU DAFTAR BARU:*\nKetik: `/start` untuk panduan\n\nℹ️ Ketik /info tidak akan bekerja sampai login',
+        parse_mode: 'Markdown'
       })
     }
 
@@ -187,6 +197,16 @@ Mulai catat pengeluaran sekarang! 🚀`,
     // Handle /logout command
     if (messageText === '/logout') {
       return await handleLogoutCommand(prisma, chatId, telegramUser)
+    }
+
+    // Handle /mystatus command - for debugging authentication
+    if (messageText === '/mystatus') {
+      return NextResponse.json({
+        method: 'sendMessage',
+        chat_id: chatId,
+        text: `🔍 *STATUS DEBUG*\n\n• ChatID: \`${chatId}\`\n• TelegramID: \`${telegramUser.telegramId}\`\n• UserID: \`${telegramUser.userId}\`\n• IsActive: \`${telegramUser.isActive}\`\n• User Name: \`${telegramUser.user?.name || 'N/A'}\`\n• User Phone: \`${telegramUser.user?.phone || 'N/A'}\``,
+        parse_mode: 'Markdown'
+      })
     }
 
     // Handle /reset command
@@ -787,13 +807,19 @@ async function handleLoginCommand(prisma: PrismaClient, chatId: number, messageT
     })
 
     if (!user) {
+      // Add more detailed error logging
+      console.log('Login failed for:', { phone, chatId })
+      
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
-        text: '❌ *LOGIN GAGAL*\n\nNomor HP atau password salah.\n\n💡 Pastikan data benar atau daftar ulang dengan /start\n\nℹ️ Ketik /info untuk bantuan',
+        text: '❌ *LOGIN GAGAL*\n\nNomor HP atau password salah.\n\n� *CEK KEMBALI:*\n• Nomor HP: `' + phone + '`\n• Password: (tersembunyi)\n\n💡 Daftar di: https://cash-gram-web-app.vercel.app',
         parse_mode: 'Markdown'
       })
     }
+
+    // Add success logging
+    console.log('Login successful for:', { phone, userId: user.id, chatId })
 
     // Update telegram user to link with the found user and activate
     await prisma.telegramUser.upsert({
@@ -812,7 +838,7 @@ async function handleLoginCommand(prisma: PrismaClient, chatId: number, messageT
     return NextResponse.json({
       method: 'sendMessage',
       chat_id: chatId,
-      text: `✅ *LOGIN BERHASIL*\n\n👋 Selamat datang kembali, ${user.name}!\n\n💰 Siap mencatat pengeluaran Anda.\n\nℹ️ Ketik /info untuk bantuan`,
+      text: `✅ *LOGIN BERHASIL*\n\n👋 Selamat datang kembali, *${user.name || 'User'}*!\n\n💰 Bot siap mencatat pengeluaran Anda.\n🎯 Mulai dengan mengetik nominal dan deskripsi\n\nContoh: \`50000 makan siang\``,
       parse_mode: 'Markdown'
     })
 

@@ -2,9 +2,26 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { PrismaClient } from '@prisma/client'
+import { GeminiService } from '@/lib/gemini'
 
 // Store temporary expense data (in production, use Redis)
 const tempExpenseData = new Map()
+
+// Store AI conversation state
+const aiConversationState = new Map()
+
+// Helper function to strip markdown formatting for Telegram
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/#{1,6}\s/g, '') // Remove headers ###
+    .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold **text**
+    .replace(/\*(.*?)\*/g, '$1') // Remove italic *text*
+    .replace(/`(.*?)`/g, '$1') // Remove code `text`
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Remove links [text](url)
+    .replace(/^[\s]*[-*+]\s/gm, '• ') // Convert bullet points
+    .replace(/^\s*\d+\.\s/gm, '') // Remove numbered lists
+    .trim()
+}
 
 export async function POST(request: NextRequest) {
   const prisma = new PrismaClient({
@@ -144,27 +161,42 @@ Mulai catat pengeluaran sekarang! 🚀`,
       }
     }
 
+    // Check if user is in AI conversation mode
+    if (aiConversationState.has(chatId)) {
+      return await handleAIQuestionResponse(prisma, chatId, messageText, telegramUser)
+    }
+
     // Check if user is selecting a category number
     if (/^\d+$/.test(messageText)) {
       return await handleCategorySelection(prisma, chatId, parseInt(messageText), telegramUser)
     }
 
-    // Parse expense format: supports both "amount description" and "description amount"
-    let expenseMatch = messageText.match(/^(\d+(?:\.\d+)?)\s+(.+)$/) // format: 50000 makan siang
+    // Try AI-powered expense parsing (handles multiple expenses and flexible formats)
+    try {
+      const aiParseResult = await parseExpenseWithAI(messageText)
+      if (aiParseResult && aiParseResult.expenses && aiParseResult.expenses.length > 0) {
+        return await handleMultipleExpenses(prisma, chatId, aiParseResult.expenses, telegramUser)
+      }
+    } catch (error) {
+      console.log('AI parsing failed, trying simple parsing:', error)
+    }
+
+    // Fallback: Simple regex parsing for basic formats
+    let expenseMatch = messageText.match(/^(\d+(?:k|rb|ribu)?)\s+(.+)$/i) // format: 50000 makan siang
     if (expenseMatch) {
-      return await handleExpenseInput(prisma, chatId, expenseMatch, telegramUser)
+      const amount = parseAmount(expenseMatch[1])
+      if (amount > 0) {
+        return await handleSingleExpense(prisma, chatId, amount, expenseMatch[2], telegramUser)
+      }
     }
     
     // Try alternative format: description amount
-    expenseMatch = messageText.match(/^(.+)\s+(\d+(?:\.\d+)?)$/) // format: beli beras 150000
+    expenseMatch = messageText.match(/^(.+)\s+(\d+(?:k|rb|ribu)?)$/i) // format: beli beras 150000
     if (expenseMatch) {
-      // Create new match array with swapped order [full_match, amount, description]
-      const swappedMatch = Object.assign([expenseMatch[0], expenseMatch[2], expenseMatch[1]], {
-        index: expenseMatch.index,
-        input: expenseMatch.input,
-        groups: expenseMatch.groups
-      }) as RegExpMatchArray
-      return await handleExpenseInput(prisma, chatId, swappedMatch, telegramUser)
+      const amount = parseAmount(expenseMatch[2])
+      if (amount > 0) {
+        return await handleSingleExpense(prisma, chatId, amount, expenseMatch[1], telegramUser)
+      }
     }
 
     // Default help message
@@ -285,12 +317,13 @@ ${categoryList}
 }
 
 async function handleCategorySelection(prisma: PrismaClient, chatId: number, categoryNumber: number, telegramUser: any) {
-  // Find the most recent expense data for this user
+  // Find expense data
   let expenseData = null
+  let expenseKey = ''
   for (const [key, data] of tempExpenseData.entries()) {
-    if (key.startsWith(chatId.toString())) {
+    if (key.startsWith(chatId.toString()) && !key.includes('_confirm') && !key.includes('_multi')) {
       expenseData = data
-      tempExpenseData.delete(key) // Clean up
+      expenseKey = key
       break
     }
   }
@@ -299,7 +332,7 @@ async function handleCategorySelection(prisma: PrismaClient, chatId: number, cat
     return NextResponse.json({
       method: 'sendMessage',
       chat_id: chatId,
-      text: '❌ Data pengeluaran tidak ditemukan. Silakan input ulang dengan format: [jumlah] [deskripsi]'
+      text: '❌ Data pengeluaran tidak ditemukan.\n\nℹ️ Ketik /info untuk bantuan'
     })
   }
 
@@ -313,81 +346,42 @@ async function handleCategorySelection(prisma: PrismaClient, chatId: number, cat
     return NextResponse.json({
       method: 'sendMessage',
       chat_id: chatId,
-      text: `❌ Nomor kategori tidak valid. Pilih antara 1-${categories.length}`
+      text: `❌ Nomor tidak valid. Pilih 1-${categories.length}\n\nℹ️ Ketik /info untuk bantuan`
     })
   }
 
   const selectedCategory = categories[categoryNumber - 1]
 
-  // Check budget
-  const activePeriod = await prisma.budgetPeriod.findFirst({
-    where: { userId: telegramUser.userId, isActive: true },
-    include: {
-      budgetAllocations: {
-        where: { categoryId: selectedCategory.id },
-        include: { category: true }
-      }
-    }
-  })
+  // Clean up current expense data
+  tempExpenseData.delete(expenseKey)
 
-  let willOverBudget = false
-  let budgetWarning = ''
+  // Check budget and create expense
+  const result = await createExpenseWithBudgetCheck(prisma, expenseData, selectedCategory, telegramUser.userId, chatId)
 
-  if (activePeriod && activePeriod.budgetAllocations.length > 0) {
-    const allocation = activePeriod.budgetAllocations[0]
-    const remaining = allocation.allocatedAmount - allocation.spentAmount
-    
-    if (expenseData.amount > remaining) {
-      willOverBudget = true
-      budgetWarning = `⚠️ *PERINGATAN OVERRUN BUDGET*
-
-💰 *Kategori:* ${selectedCategory.icon} ${selectedCategory.name}
-💳 *Pengeluaran:* Rp ${expenseData.amount.toLocaleString('id-ID')}
-
-📊 *Status Budget:*
-• Alokasi: Rp ${allocation.allocatedAmount.toLocaleString('id-ID')}
-• Terpakai: Rp ${allocation.spentAmount.toLocaleString('id-ID')}
-• Sisa: Rp ${remaining.toLocaleString('id-ID')}
-• Kelebihan: Rp ${(expenseData.amount - remaining).toLocaleString('id-ID')}
-
-Ketik "lanjut" untuk tetap catat dengan status OVERLOAD BUDGET
-Ketik "batal" untuk membatalkan`
-
-      // Store for continuation
-      tempExpenseData.set(`${chatId}_confirm`, { 
-        ...expenseData, 
-        categoryId: selectedCategory.id,
-        willOverBudget: true 
+  // Handle multiple expense flow
+  if (expenseData.isMulti && expenseData.multiKey) {
+    const multiData = tempExpenseData.get(expenseData.multiKey)
+    if (multiData) {
+      // Store result
+      multiData.results.push({
+        amount: expenseData.amount,
+        description: expenseData.description,
+        category: selectedCategory
       })
+      multiData.currentIndex += 1
 
-      return NextResponse.json({
-        method: 'sendMessage',
-        chat_id: chatId,
-        text: budgetWarning,
-        parse_mode: 'Markdown'
-      })
+      // Continue to next expense
+      return await processNextExpense(prisma, chatId, expenseData.multiKey, telegramUser)
     }
   }
 
-  // Create expense
-  return await createExpense(prisma, expenseData, selectedCategory, telegramUser.userId, willOverBudget, chatId)
+  return result
 }
 
-async function createExpense(prisma: PrismaClient, expenseData: any, category: any, userId: string, willOverBudget: boolean, chatId: number) {
-  const expenseDescription = willOverBudget ? `[OVERLOAD BUDGET] ${expenseData.description}` : expenseData.description
-
-  const expense = await prisma.expense.create({
-    data: {
-      amount: parseFloat(expenseData.amount.toString()),
-      description: expenseDescription,
-      userId: userId,
-      categoryId: category.id
-    }
-  })
-
-  // Update budget allocation
+async function createExpenseWithBudgetCheck(prisma: PrismaClient, expenseData: any, category: any, userId: string, chatId: number) {
+  // Check budget first
   const activePeriod = await prisma.budgetPeriod.findFirst({
-    where: { userId: userId, isActive: true },
+    where: { userId, isActive: true },
     include: {
       budgetAllocations: {
         where: { categoryId: category.id }
@@ -395,13 +389,50 @@ async function createExpense(prisma: PrismaClient, expenseData: any, category: a
     }
   })
 
+  let willOverBudget = false
+  let budgetStatus = 'Budget aman'
+  
+  if (activePeriod && activePeriod.budgetAllocations.length > 0) {
+    const allocation = activePeriod.budgetAllocations[0]
+    const remaining = allocation.allocatedAmount - allocation.spentAmount
+    
+    if (expenseData.amount > remaining) {
+      willOverBudget = true
+      budgetStatus = 'OVER BUDGET!'
+      
+      // Store for confirmation
+      tempExpenseData.set(`${chatId}_confirm`, { 
+        ...expenseData, 
+        categoryId: category.id
+      })
+
+      return NextResponse.json({
+        method: 'sendMessage',
+        chat_id: chatId,
+        text: `⚠️ *PERINGATAN BUDGET*\n\n💰 ${category.icon || '💰'} ${category.name}\n💳 Pengeluaran: Rp ${expenseData.amount.toLocaleString('id-ID')}\n📊 Sisa budget: Rp ${remaining.toLocaleString('id-ID')}\n\nKetik "lanjut" untuk tetap catat\nKetik "batal" untuk batalkan\n\nℹ️ Ketik /info untuk bantuan`,
+        parse_mode: 'Markdown'
+      })
+    }
+  }
+
+  // Create expense
+  const expenseDescription = willOverBudget ? `[OVERLOAD] ${expenseData.description}` : expenseData.description
+  
+  await prisma.expense.create({
+    data: {
+      amount: expenseData.amount,
+      description: expenseDescription,
+      userId,
+      categoryId: category.id
+    }
+  })
+
+  // Update budget allocation
   if (activePeriod && activePeriod.budgetAllocations.length > 0) {
     await prisma.budgetAllocation.update({
       where: { id: activePeriod.budgetAllocations[0].id },
-      data: {
-        spentAmount: {
-          increment: parseFloat(expenseData.amount.toString())
-        }
+      data: { 
+        spentAmount: { increment: expenseData.amount }
       }
     })
   }
@@ -409,14 +440,7 @@ async function createExpense(prisma: PrismaClient, expenseData: any, category: a
   return NextResponse.json({
     method: 'sendMessage',
     chat_id: chatId,
-    text: `✅ *Pengeluaran berhasil dicatat!*
-
-💰 *Jumlah:* Rp ${expenseData.amount.toLocaleString('id-ID')}
-📝 *Deskripsi:* ${expenseData.description}
-🏷️ *Kategori:* ${category.icon} ${category.name}
-📅 *Tanggal:* ${new Date().toLocaleDateString('id-ID')}
-
-${willOverBudget ? '⚠️ *Status:* OVERLOAD BUDGET' : '✅ *Status:* Budget aman'}`,
+    text: `✅ *BERHASIL DICATAT!*\n\n💰 Rp ${expenseData.amount.toLocaleString('id-ID')}\n📝 ${expenseData.description}\n🏷️ ${category.icon || '💰'} ${category.name}\n📅 ${new Date().toLocaleDateString('id-ID')}\n\n✅ Status: ${budgetStatus}\n\nℹ️ Ketik /info untuk bantuan`,
     parse_mode: 'Markdown'
   })
 }
@@ -436,14 +460,14 @@ async function handleConfirmation(prisma: PrismaClient, chatId: number, message:
       where: { id: confirmData.categoryId }
     })
 
-    return await createExpense(prisma, confirmData, category, telegramUser.userId, true, chatId)
+    return await createExpenseWithBudgetCheck(prisma, confirmData, category, telegramUser.userId, chatId)
   } else if (message.toLowerCase() === 'batal') {
     tempExpenseData.delete(`${chatId}_confirm`)
     
     return NextResponse.json({
       method: 'sendMessage',
       chat_id: chatId,
-      text: '❌ Pencatatan pengeluaran dibatalkan.'
+      text: '❌ Pencatatan pengeluaran dibatalkan.\n\nℹ️ Ketik /info untuk bantuan'
     })
   }
   
@@ -473,21 +497,25 @@ async function handleSaldoCommand(prisma: PrismaClient, chatId: number, telegram
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
-        text: '📊 *SALDO HARI INI*\n\n💰 Total pengeluaran: Rp 0\n\n📝 Belum ada pengeluaran hari ini.',
+        text: `📊 *SALDO HARI INI*\n📅 ${today.toLocaleDateString('id-ID')}\n\n💰 Total pengeluaran: Rp 0\n\n📝 Belum ada pengeluaran hari ini.\n\nℹ️ Ketik /info untuk bantuan`,
         parse_mode: 'Markdown'
       })
     }
 
     const totalToday = todayExpenses.reduce((sum, expense) => sum + expense.amount, 0)
-    let expenseList = '📝 *Detail Pengeluaran:*\n'
-    todayExpenses.forEach((expense, index) => {
-      expenseList += `${index + 1}. ${expense.category.icon} ${expense.description} - Rp ${expense.amount.toLocaleString('id-ID')}\n`
+    let expenseList = '📝 *Detail:*\n'
+    todayExpenses.slice(0, 5).forEach((expense, index) => { // Max 5 items untuk telegram
+      expenseList += `${index + 1}. ${expense.category.icon || '💰'} ${expense.description} - Rp ${expense.amount.toLocaleString('id-ID')}\n`
     })
+
+    if (todayExpenses.length > 5) {
+      expenseList += `... dan ${todayExpenses.length - 5} lainnya\n`
+    }
 
     return NextResponse.json({
       method: 'sendMessage',
       chat_id: chatId,
-      text: `📊 *SALDO HARI INI*\n\n💰 *Total pengeluaran:* Rp ${totalToday.toLocaleString('id-ID')}\n\n${expenseList}`,
+      text: `📊 *SALDO HARI INI*\n📅 ${today.toLocaleDateString('id-ID')}\n\n💰 *Total:* Rp ${totalToday.toLocaleString('id-ID')}\n📊 *Transaksi:* ${todayExpenses.length}\n\n${expenseList}\nℹ️ Ketik /info untuk bantuan`,
       parse_mode: 'Markdown'
     })
   } catch (error) {
@@ -603,6 +631,7 @@ async function handleTabunganCommand(prisma: PrismaClient, chatId: number, teleg
 }
 
 // Handle /analisis command
+// Handle /analisis command with AI integration
 async function handleAnalisisCommand(prisma: PrismaClient, chatId: number, message: string, telegramUser: any) {
   try {
     const period = message.includes('minggu') ? 'week' : 'month'
@@ -623,40 +652,28 @@ async function handleAnalisisCommand(prisma: PrismaClient, chatId: number, messa
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
-        text: `📊 *ANALISIS ${period === 'week' ? 'MINGGU' : 'BULAN'} INI*\n\n❌ Belum ada pengeluaran untuk dianalisis.\n\n💡 Mulai catat pengeluaran dengan format:\n"beli nasi 25000"`,
+        text: `📊 *ANALISIS ${period === 'week' ? 'MINGGU' : 'BULAN'} INI*\n\n❌ Belum ada pengeluaran untuk dianalisis.\n\n💡 Mulai catat pengeluaran:\n"beli nasi 25000"\n\nℹ️ Ketik /info untuk bantuan`,
         parse_mode: 'Markdown'
       })
     }
 
-    // Simple analysis without AI
-    const totalAmount = expenses.reduce((sum, exp) => sum + exp.amount, 0)
-    const avgDaily = totalAmount / days
-    const categoryGroups = expenses.reduce((acc, exp) => {
-      if (!acc[exp.category.name]) {
-        acc[exp.category.name] = { total: 0, count: 0, icon: exp.category.icon }
-      }
-      acc[exp.category.name].total += exp.amount
-      acc[exp.category.name].count += 1
-      return acc
-    }, {} as any)
+    // Generate AI analysis
+    const aiAnalysis = await GeminiService.generatePeriodAnalysis(expenses, period)
+    const cleanAnalysis = stripMarkdown(aiAnalysis)
+    
+    // Store conversation state for Q&A
+    aiConversationState.set(chatId, {
+      expenses,
+      period,
+      timestamp: Date.now()
+    })
 
-    let analysisText = `📊 *ANALISIS ${period === 'week' ? 'MINGGU' : 'BULAN'} INI*\n\n`
-    analysisText += `💰 *Total Pengeluaran:* Rp ${totalAmount.toLocaleString('id-ID')}\n`
-    analysisText += `📅 *Rata-rata Harian:* Rp ${avgDaily.toLocaleString('id-ID')}\n`
-    analysisText += `📊 *Total Transaksi:* ${expenses.length}\n\n`
-    analysisText += `🏷️ *Per Kategori:*\n`
-
-    Object.entries(categoryGroups)
-      .sort(([,a], [,b]) => (b as any).total - (a as any).total)
-      .forEach(([name, data], index) => {
-        const percentage = ((data as any).total / totalAmount * 100).toFixed(1)
-        analysisText += `${index + 1}. ${(data as any).icon} ${name}: Rp ${(data as any).total.toLocaleString('id-ID')} (${percentage}%)\n`
-      })
-
+    const shortAnalysis = cleanAnalysis.substring(0, 800) + (cleanAnalysis.length > 800 ? '...' : '')
+    
     return NextResponse.json({
       method: 'sendMessage',
       chat_id: chatId,
-      text: analysisText,
+      text: `${shortAnalysis}\n\n🤔 *Ada pertanyaan tentang keuangan Anda?*\n\nContoh: "Pengeluaran mana yang harus dikurangi?" atau "Berapa target tabungan per bulan?"\n\n💡 Ketik "tidak" jika tidak ada pertanyaan.\n\nℹ️ Ketik /info untuk bantuan`,
       parse_mode: 'Markdown'
     })
   } catch (error) {
@@ -664,7 +681,7 @@ async function handleAnalisisCommand(prisma: PrismaClient, chatId: number, messa
     return NextResponse.json({
       method: 'sendMessage',
       chat_id: chatId,
-      text: '❌ Gagal menganalisis data pengeluaran.'
+      text: '❌ Gagal menganalisis data pengeluaran.\n\nℹ️ Ketik /info untuk bantuan'
     })
   }
 }
@@ -708,7 +725,239 @@ async function handleResetCommand(prisma: PrismaClient, chatId: number, telegram
   return NextResponse.json({
     method: 'sendMessage',
     chat_id: chatId,
-    text: `🔄 *RESET ACCOUNT*\n\n💡 Untuk reset akun, silakan:\n\n1. Logout: /logout\n2. Login ulang: /start\n3. Atau gunakan dashboard web:\n🌐 https://cash-gram-web-app.vercel.app\n\n🆘 Masih bermasalah? Hubungi support.`,
+    text: `🔄 *RESET ACCOUNT*\n\n💡 Untuk reset akun, silakan:\n\n1. Logout: /logout\n2. Login ulang: /start\n3. Atau gunakan dashboard web:\n🌐 https://cash-gram-web-app.vercel.app\n\n🆘 Masih bermasalah? Hubungi support.\n\nℹ️ Ketik /info untuk bantuan`,
     parse_mode: 'Markdown'
   })
+}
+
+// Helper function to parse amount from text (handles k, rb, ribu)
+function parseAmount(amountText: string): number {
+  const cleanText = amountText.toLowerCase().replace(/[^\d]/g, '')
+  const baseAmount = parseInt(cleanText) || 0
+  
+  if (amountText.toLowerCase().includes('k') || 
+      amountText.toLowerCase().includes('ribu')) {
+    return baseAmount * 1000
+  }
+  
+  return baseAmount
+}
+
+// AI-powered expense parsing
+async function parseExpenseWithAI(text: string) {
+  try {
+    const result = await GeminiService.parseMultipleExpenses(text)
+    return result
+  } catch (error) {
+    console.error('AI parsing error:', error)
+    return null
+  }
+}
+
+// Handle multiple expenses iteration
+async function handleMultipleExpenses(prisma: PrismaClient, chatId: number, expenses: any[], telegramUser: any) {
+  // Store all expenses in temp data for processing one by one
+  const multiExpenseKey = `${chatId}_multi_${Date.now()}`
+  tempExpenseData.set(multiExpenseKey, {
+    expenses,
+    currentIndex: 0,
+    results: []
+  })
+
+  // Start with first expense
+  return await processNextExpense(prisma, chatId, multiExpenseKey, telegramUser)
+}
+
+// Process next expense in multi-expense flow
+async function processNextExpense(prisma: PrismaClient, chatId: number, multiKey: string, telegramUser: any) {
+  const multiData = tempExpenseData.get(multiKey)
+  if (!multiData) {
+    return NextResponse.json({
+      method: 'sendMessage',
+      chat_id: chatId,
+      text: '❌ Data pengeluaran tidak ditemukan.\n\nℹ️ Ketik /info untuk bantuan'
+    })
+  }
+
+  const currentExpense = multiData.expenses[multiData.currentIndex]
+  if (!currentExpense) {
+    // All expenses processed, show summary
+    return await showMultiExpenseSummary(prisma, chatId, multiData.results, telegramUser)
+  }
+
+  // Store current expense for category selection
+  const expenseKey = `${chatId}_${Date.now()}`
+  tempExpenseData.set(expenseKey, {
+    amount: currentExpense.amount,
+    description: currentExpense.description,
+    telegramId: chatId.toString(),
+    multiKey, // Reference to multi-expense data
+    isMulti: true
+  })
+
+  // Show category selection
+  return await showCategorySelection(prisma, chatId, currentExpense.amount, currentExpense.description, telegramUser)
+}
+
+// Handle single expense
+async function handleSingleExpense(prisma: PrismaClient, chatId: number, amount: number, description: string, telegramUser: any) {
+  const expenseKey = `${chatId}_${Date.now()}`
+  tempExpenseData.set(expenseKey, {
+    amount,
+    description: description.trim(),
+    telegramId: chatId.toString(),
+    isMulti: false
+  })
+
+  return await showCategorySelection(prisma, chatId, amount, description, telegramUser)
+}
+
+// Show category selection with budget status
+async function showCategorySelection(prisma: PrismaClient, chatId: number, amount: number, description: string, telegramUser: any) {
+  const categories = await prisma.category.findMany({
+    where: { userId: telegramUser.userId },
+    orderBy: { name: 'asc' }
+  })
+
+  if (categories.length === 0) {
+    return NextResponse.json({
+      method: 'sendMessage',
+      chat_id: chatId,
+      text: '❌ Belum ada kategori. Silakan buat kategori terlebih dahulu di web app.\n\nℹ️ Ketik /info untuk bantuan'
+    })
+  }
+
+  // Get active budget period for status checking
+  const activePeriod = await prisma.budgetPeriod.findFirst({
+    where: { userId: telegramUser.userId, isActive: true },
+    include: {
+      budgetAllocations: {
+        include: { category: true }
+      }
+    }
+  })
+
+  let categoryText = `💰 *Pengeluaran:* Rp ${amount.toLocaleString('id-ID')}\n📝 *Deskripsi:* ${description}\n\n🎯 *Pilih kategori (ketik nomor):*\n\n`
+
+  categories.forEach((category, index) => {
+    let status = '📂'
+    let budgetInfo = 'Belum ada budget'
+
+    if (activePeriod) {
+      const allocation = activePeriod.budgetAllocations.find(a => a.categoryId === category.id)
+      if (allocation) {
+        const remaining = allocation.allocatedAmount - allocation.spentAmount
+        if (remaining <= 0) {
+          status = '❌'
+          budgetInfo = 'Budget habis'
+        } else if (amount > remaining) {
+          status = '⚠️'
+          budgetInfo = `Sisa: Rp ${remaining.toLocaleString('id-ID')} - OVER!`
+        } else {
+          status = '✅'
+          budgetInfo = `Sisa: Rp ${remaining.toLocaleString('id-ID')}`
+        }
+      }
+    }
+
+    categoryText += `${index + 1}. ${status} ${category.icon || '💰'} ${category.name} (${budgetInfo})\n`
+  })
+
+  categoryText += `\n💡 *Keterangan:*\n✅ Budget aman\n⚠️ Akan over budget\n❌ Budget habis\n📂 Belum ada budget\n\nℹ️ Ketik /info untuk bantuan`
+
+  return NextResponse.json({
+    method: 'sendMessage',
+    chat_id: chatId,
+    text: categoryText,
+    parse_mode: 'Markdown'
+  })
+}
+
+// Show multi-expense summary
+async function showMultiExpenseSummary(prisma: PrismaClient, chatId: number, results: any[], telegramUser: any) {
+  tempExpenseData.delete(`${chatId}_multi_*`) // Clean up
+
+  const totalAmount = results.reduce((sum, result) => sum + result.amount, 0)
+  let summaryText = `✅ *SEMUA PENGELUARAN BERHASIL DICATAT!*\n\n`
+  summaryText += `💰 *Total:* Rp ${totalAmount.toLocaleString('id-ID')}\n`
+  summaryText += `📊 *Jumlah item:* ${results.length}\n\n`
+  summaryText += `📝 *Detail:*\n`
+
+  results.forEach((result, index) => {
+    summaryText += `${index + 1}. ${result.category.icon} ${result.description} - Rp ${result.amount.toLocaleString('id-ID')} (${result.category.name})\n`
+  })
+
+  summaryText += `\n📅 *Tanggal:* ${new Date().toLocaleDateString('id-ID')}\n\nℹ️ Ketik /info untuk bantuan`
+
+  return NextResponse.json({
+    method: 'sendMessage',
+    chat_id: chatId,
+    text: summaryText,
+    parse_mode: 'Markdown'
+  })
+}
+
+// Handle AI question response for /analisis
+async function handleAIQuestionResponse(prisma: PrismaClient, chatId: number, question: string, telegramUser: any) {
+  const conversationData = aiConversationState.get(chatId)
+  if (!conversationData) {
+    aiConversationState.delete(chatId)
+    return NextResponse.json({
+      method: 'sendMessage',
+      chat_id: chatId,
+      text: '❌ Sesi analisis sudah berakhir.\n\nℹ️ Ketik /info untuk bantuan'
+    })
+  }
+
+  // Check if user wants to skip
+  if (question.toLowerCase().includes('tidak') || question.toLowerCase().includes('no')) {
+    aiConversationState.delete(chatId)
+    return NextResponse.json({
+      method: 'sendMessage',
+      chat_id: chatId,
+      text: '👍 Baik, analisis selesai.\n\nℹ️ Ketik /info untuk bantuan'
+    })
+  }
+
+  try {
+    // Get user's expense data for context
+    const expenses = await prisma.expense.findMany({
+      where: {
+        userId: telegramUser.userId,
+        date: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+      },
+      include: { category: true }
+    })
+
+    const expenseContext = expenses.map(exp => 
+      `Rp ${exp.amount.toLocaleString('id-ID')} - ${exp.description} (${exp.category.name}) - ${exp.date.toLocaleDateString('id-ID')}`
+    ).join('\n')
+
+    const prompt = `Berdasarkan data pengeluaran user berikut:
+
+${expenseContext}
+
+User bertanya: "${question}"
+
+Berikan jawaban yang helpful, specific, dan actionable dalam bahasa Indonesia. Jawaban maksimal 200 kata. Fokus pada analisis finansial yang praktis.`
+
+    const aiResponse = await GeminiService.generateResponse(prompt)
+    
+    aiConversationState.delete(chatId)
+    
+    return NextResponse.json({
+      method: 'sendMessage',
+      chat_id: chatId,
+      text: `🤖 ${stripMarkdown(aiResponse)}\n\n✨ Semoga bisa membantu!\n\nℹ️ Ketik /info untuk bantuan`,
+      parse_mode: 'Markdown'
+    })
+  } catch (error) {
+    console.error('AI response error:', error)
+    aiConversationState.delete(chatId)
+    return NextResponse.json({
+      method: 'sendMessage',
+      chat_id: chatId,
+      text: '❌ Maaf, AI sedang bermasalah. Coba lagi nanti.\n\nℹ️ Ketik /info untuk bantuan'
+    })
+  }
 }

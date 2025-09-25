@@ -506,4 +506,24 @@ ${topCategory ? `${topCategory[0]} adalah yang paling banyak dengan Rp ${(topCat
       return `## ❌ **Error**\nMaaf, terjadi kesalahan saat menganalisis pengeluaran ${periodText}.`
     }
   }
+
+  // General response generation for AI conversations
+  static async generateResponse(prompt: string): Promise<string> {
+    try {
+      return await retryWithBackoff(async () => {
+        const result = await model.generateContent(prompt)
+        const response = await result.response
+        const text = response.text()
+        
+        if (!text || text.trim() === '') {
+          throw new Error('Empty response from Gemini')
+        }
+        
+        return text.trim()
+      })
+    } catch (error: any) {
+      console.error('Gemini generateResponse error:', error)
+      throw new Error('AI conversation failed')
+    }
+  }
 }

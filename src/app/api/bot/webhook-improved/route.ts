@@ -59,26 +59,62 @@ export async function POST(request: NextRequest) {
 
     // Handle /start command
     if (messageText === '/start') {
+      // Check if user is logged out (exists but inactive)
+      const existingTelegramUser = await prisma.telegramUser.findUnique({
+        where: { telegramId: chatId.toString() }
+      })
+
+      if (existingTelegramUser && !existingTelegramUser.isActive) {
+        // User exists but is logged out - ask for login
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: `👋 *SELAMAT DATANG KEMBALI!*
+
+🔐 Anda sudah logout sebelumnya. Pilih cara masuk:
+
+📱 *LOGIN DENGAN AKUN:*
+Ketik: \`/login nomorhp password\`
+Contoh: \`/login 081234567890 mypass\`
+
+🆕 *ATAU DAFTAR BARU:*
+💻 Buka dashboard: https://cash-gram-web-app.vercel.app
+📝 Daftar akun baru, lalu login di atas
+
+ℹ️ Ketik /info untuk bantuan`,
+          parse_mode: 'Markdown'
+        })
+      }
+
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
-        text: `🎉 Selamat datang di CashGram Bot!
+        text: `🎉 *Selamat datang di CashGram Bot!*
 
-💻 DASHBOARD WEBSITE:
+💻 *DASHBOARD WEBSITE:*
 🌐 https://cash-gram-web-app.vercel.app
 
-🤖 FUNGSI BOT YANG TERSEDIA:
-• 💰 Input pengeluaran: "beli nasi 25000" atau "25000 makan siang"
+📝 *Format pencatatan pengeluaran:*
+[jumlah] [deskripsi] atau [deskripsi] [jumlah]
 
-📊 /analisis - Analisis AI pengeluaran bulanan
-📊 /analisis minggu - Analisis mingguan
+📖 *Contoh:*
+• 50000 makan siang
+• beli nasi 25000  
+• beli makanan 20rb dan bensin 30rb (multiple)
+• saya beli kopi 15k
+
+🎯 *Setelah input, pilih kategori dengan mengetik nomor (1-10)*
+
+🤖 *COMMAND TERSEDIA:*
+📊 /analisis - AI analisis + Q&A pengeluaran
 💰 /saldo - Total pengeluaran hari ini
 🏦 /budget - Status budget saat ini
-💰 /tabungan - Total tabungan dari sisa budget
-📤 /export - Export data ke Excel
+💰 /tabungan - Total tabungan
+� /login [nohp] [password] - Login ke akun
 🔓 /logout - Keluar dari bot
-🔄 /reset - Reset dan login ulang
-ℹ️ /info - Tampilkan panduan ini
+🔄 /reset - Hapus semua data user
+📤 /export - Export data
+ℹ️ /info - Panduan lengkap
 
 Mulai catat pengeluaran sekarang! 🚀`,
         parse_mode: 'Markdown'
@@ -141,6 +177,11 @@ Mulai catat pengeluaran sekarang! 🚀`,
     // Handle /export command
     if (messageText === '/export') {
       return await handleExportCommand(prisma, chatId, telegramUser)
+    }
+
+    // Handle /login command
+    if (messageText.startsWith('/login')) {
+      return await handleLoginCommand(prisma, chatId, messageText, telegramUser)
     }
 
     // Handle /logout command
@@ -720,14 +761,132 @@ async function handleLogoutCommand(prisma: PrismaClient, chatId: number, telegra
   }
 }
 
-// Handle /reset command
+// Handle /login command with phone and password
+async function handleLoginCommand(prisma: PrismaClient, chatId: number, messageText: string, telegramUser: any) {
+  try {
+    // Parse /login command - expect format: /login phone password
+    const parts = messageText.trim().split(' ')
+    
+    if (parts.length !== 3) {
+      return NextResponse.json({
+        method: 'sendMessage',
+        chat_id: chatId,
+        text: '� *FORMAT LOGIN*\n\nGunakan format:\n`/login nomorhp password`\n\nContoh:\n`/login 081234567890 mypassword`\n\nℹ️ Ketik /info untuk bantuan',
+        parse_mode: 'Markdown'
+      })
+    }
+
+    const [_, phone, password] = parts
+    
+    // Find user by phone and password
+    const user = await prisma.user.findFirst({
+      where: {
+        phone: phone,
+        password: password // In production, this should be hashed
+      }
+    })
+
+    if (!user) {
+      return NextResponse.json({
+        method: 'sendMessage',
+        chat_id: chatId,
+        text: '❌ *LOGIN GAGAL*\n\nNomor HP atau password salah.\n\n💡 Pastikan data benar atau daftar ulang dengan /start\n\nℹ️ Ketik /info untuk bantuan',
+        parse_mode: 'Markdown'
+      })
+    }
+
+    // Update telegram user to link with the found user and activate
+    await prisma.telegramUser.upsert({
+      where: { telegramId: chatId.toString() },
+      update: { 
+        userId: user.id,
+        isActive: true
+      },
+      create: {
+        telegramId: chatId.toString(),
+        userId: user.id,
+        isActive: true
+      }
+    })
+
+    return NextResponse.json({
+      method: 'sendMessage',
+      chat_id: chatId,
+      text: `✅ *LOGIN BERHASIL*\n\n👋 Selamat datang kembali, ${user.name}!\n\n💰 Siap mencatat pengeluaran Anda.\n\nℹ️ Ketik /info untuk bantuan`,
+      parse_mode: 'Markdown'
+    })
+
+  } catch (error) {
+    console.error('Login command error:', error)
+    return NextResponse.json({
+      method: 'sendMessage',
+      chat_id: chatId,
+      text: '❌ Gagal login. Coba lagi.\n\nℹ️ Ketik /info untuk bantuan'
+    })
+  }
+}
+
+// Handle /reset command - delete all user data
 async function handleResetCommand(prisma: PrismaClient, chatId: number, telegramUser: any) {
-  return NextResponse.json({
-    method: 'sendMessage',
-    chat_id: chatId,
-    text: `🔄 *RESET ACCOUNT*\n\n💡 Untuk reset akun, silakan:\n\n1. Logout: /logout\n2. Login ulang: /start\n3. Atau gunakan dashboard web:\n🌐 https://cash-gram-web-app.vercel.app\n\n🆘 Masih bermasalah? Hubungi support.\n\nℹ️ Ketik /info untuk bantuan`,
-    parse_mode: 'Markdown'
-  })
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: telegramUser.userId }
+    })
+
+    if (!user) {
+      return NextResponse.json({
+        method: 'sendMessage',
+        chat_id: chatId,
+        text: '❌ User tidak ditemukan.\n\nℹ️ Ketik /info untuk bantuan'
+      })
+    }
+
+    // Delete all user data in order (foreign key constraints)
+    await prisma.expense.deleteMany({
+      where: { userId: telegramUser.userId }
+    })
+    
+    await prisma.category.deleteMany({
+      where: { userId: telegramUser.userId }
+    })
+    
+    await prisma.budgetAllocation.deleteMany({
+      where: { 
+        budgetPeriod: {
+          userId: telegramUser.userId
+        }
+      }
+    })
+
+    await prisma.budgetPeriod.deleteMany({
+      where: { userId: telegramUser.userId }
+    })
+
+    await prisma.savings.deleteMany({
+      where: { userId: telegramUser.userId }
+    })
+
+    // Deactivate telegram user but keep the link
+    await prisma.telegramUser.update({
+      where: { id: telegramUser.id },
+      data: { isActive: false }
+    })
+
+    return NextResponse.json({
+      method: 'sendMessage',
+      chat_id: chatId,
+      text: '🗑️ *RESET BERHASIL*\n\n✅ Semua data berhasil dihapus:\n• Expenses\n• Categories\n• Budget\n\n💡 Untuk mulai lagi, ketik /start\n\nℹ️ Ketik /info untuk bantuan',
+      parse_mode: 'Markdown'
+    })
+
+  } catch (error) {
+    console.error('Reset command error:', error)
+    return NextResponse.json({
+      method: 'sendMessage',
+      chat_id: chatId,
+      text: '❌ Gagal reset data.\n\nℹ️ Ketik /info untuk bantuan'
+    })
+  }
 }
 
 // Helper function to parse amount from text (handles k, rb, ribu)

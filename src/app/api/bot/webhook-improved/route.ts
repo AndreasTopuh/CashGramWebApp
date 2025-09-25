@@ -209,6 +209,41 @@ Mulai catat pengeluaran sekarang! 🚀`,
       })
     }
 
+    // Handle /checkdb command - check if user data exists
+    if (messageText.startsWith('/checkdb')) {
+      const parts = messageText.trim().split(' ')
+      if (parts.length === 2) {
+        const phoneToCheck = parts[1]
+        try {
+          const userExists = await prisma.user.findFirst({
+            where: { phone: phoneToCheck },
+            select: { phone: true, password: true, name: true, id: true }
+          })
+          
+          return NextResponse.json({
+            method: 'sendMessage',
+            chat_id: chatId,
+            text: userExists 
+              ? `✅ *USER DITEMUKAN*\n\n• Phone: \`${userExists.phone}\`\n• Password: \`${userExists.password}\`\n• Name: \`${userExists.name}\`\n• ID: \`${userExists.id}\``
+              : `❌ *USER TIDAK DITEMUKAN*\n\nPhone \`${phoneToCheck}\` tidak ada di database`,
+            parse_mode: 'Markdown'
+          })
+        } catch (error) {
+          return NextResponse.json({
+            method: 'sendMessage',
+            chat_id: chatId,
+            text: `❌ Error checking database: ${error instanceof Error ? error.message : 'Unknown error'}`
+          })
+        }
+      } else {
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: 'Format: `/checkdb nomorhp`\nContoh: `/checkdb 085717797065`'
+        })
+      }
+    }
+
     // Handle /reset command
     if (messageText === '/reset') {
       return await handleResetCommand(prisma, chatId, telegramUser)

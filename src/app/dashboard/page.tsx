@@ -282,6 +282,36 @@ export default function DashboardPage() {
     }
   }
 
+  const handleDeleteCategory = async (categoryId: string, categoryName: string) => {
+    if (!confirm(`Yakin ingin menghapus kategori "${categoryName}"?\n\nKategori yang memiliki pengeluaran atau alokasi budget tidak dapat dihapus.`)) return
+
+    const token = localStorage.getItem('token')
+
+    try {
+      const response = await fetch(`/api/categories/${categoryId}`, {
+        method: 'DELETE',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        alert('Kategori berhasil dihapus!')
+        // Refresh data to update categories list
+        loadData(token!)
+      } else {
+        // Show specific error message in Indonesian
+        alert(`Gagal menghapus kategori: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('Error deleting category:', error)
+      alert('Terjadi kesalahan saat menghapus kategori')
+    }
+  }
+
   const handleCreateCategory = async () => {
     if (!categoryName.trim()) return
 
@@ -1289,6 +1319,14 @@ export default function DashboardPage() {
                           placeholder="0"
                           className="w-24 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
                         />
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCategory(category.id, category.name)}
+                          className="p-1 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                          title="Hapus kategori"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -1419,6 +1457,14 @@ export default function DashboardPage() {
                           placeholder="0"
                           className="w-24 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
                         />
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCategory(category.id, category.name)}
+                          className="p-1 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                          title="Hapus kategori"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     ))}
                   </div>

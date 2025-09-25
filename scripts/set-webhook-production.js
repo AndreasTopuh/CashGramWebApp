@@ -1,18 +1,10 @@
-require('dotenv').config()
+require('dotenv').config({ path: '.env.local' })
 const https = require('https')
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
-const WEBHOOK_URL = `http://localhost:3000/api/bot/webhook-improved`
+const WEBHOOK_URL = 'https://cash-gram-web-app.vercel.app/api/bot/webhook-improved'
 
-if (!BOT_TOKEN) {
-  console.error('❌ TELEGRAM_BOT_TOKEN not found in .env.local')
-  process.exit(1)
-}
-
-if (!process.env.NEXTAUTH_URL) {
-  console.error('❌ NEXTAUTH_URL not found in .env.local')
-  process.exit(1)
-}
+console.log(`🔄 Setting webhook to: ${WEBHOOK_URL}`)
 
 // Set webhook
 const setWebhookUrl = `https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`
@@ -28,8 +20,6 @@ const options = {
   }
 }
 
-console.log(`🔄 Setting webhook to: ${WEBHOOK_URL}`)
-
 const req = https.request(setWebhookUrl, options, (res) => {
   let responseData = ''
   
@@ -41,7 +31,7 @@ const req = https.request(setWebhookUrl, options, (res) => {
     const result = JSON.parse(responseData)
     if (result.ok) {
       console.log('✅ Webhook set successfully!')
-      console.log('📱 Your bot is ready to use')
+      console.log('📱 Bot now uses webhook-improved endpoint')
     } else {
       console.error('❌ Failed to set webhook:', result)
     }

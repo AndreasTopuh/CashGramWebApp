@@ -525,7 +525,7 @@ async function handleBudgetCommand(prisma: PrismaClient, chatId: number, telegra
     const totalSpent = activePeriod.budgetAllocations.reduce((sum, alloc) => sum + alloc.spentAmount, 0)
     const totalRemaining = totalAllocated - totalSpent
 
-    let budgetText = `🏦 *STATUS BUDGET ${activePeriod.month}/${activePeriod.year}*\n\n`
+    let budgetText = `🏦 *STATUS BUDGET*\n\n`
     budgetText += `💰 *Total Budget:* Rp ${totalAllocated.toLocaleString('id-ID')}\n`
     budgetText += `💸 *Terpakai:* Rp ${totalSpent.toLocaleString('id-ID')}\n`
     budgetText += `💳 *Sisa:* Rp ${totalRemaining.toLocaleString('id-ID')}\n\n`
@@ -561,7 +561,6 @@ async function handleTabunganCommand(prisma: PrismaClient, chatId: number, teleg
   try {
     const savings = await prisma.savings.findMany({
       where: { userId: telegramUser.userId },
-      include: { budgetPeriod: true },
       orderBy: { createdAt: 'desc' },
       take: 5
     })
@@ -580,7 +579,11 @@ async function handleTabunganCommand(prisma: PrismaClient, chatId: number, teleg
     savingsText += `📊 *Riwayat 5 Terakhir:*\n`
 
     savings.forEach((saving, index) => {
-      savingsText += `${index + 1}. ${saving.budgetPeriod.month}/${saving.budgetPeriod.year} - Rp ${saving.amount.toLocaleString('id-ID')}\n`
+      const date = saving.createdAt.toLocaleDateString('id-ID')
+      savingsText += `${index + 1}. ${date} - Rp ${saving.amount.toLocaleString('id-ID')}\n`
+      if (saving.description) {
+        savingsText += `   ${saving.description}\n`
+      }
     })
 
     return NextResponse.json({

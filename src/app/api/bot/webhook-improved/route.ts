@@ -296,7 +296,7 @@ ${willOverBudget ? '⚠️ *Status:* OVERLOAD BUDGET' : '✅ *Status:* Budget am
 }
 
 // Handle confirmation for budget overrun
-export async function handleConfirmation(prisma: PrismaClient, chatId: number, message: string, telegramUser: any) {
+async function handleConfirmation(prisma: PrismaClient, chatId: number, message: string, telegramUser: any) {
   const confirmData = tempExpenseData.get(`${chatId}_confirm`)
   
   if (!confirmData) {

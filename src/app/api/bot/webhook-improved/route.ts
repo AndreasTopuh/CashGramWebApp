@@ -43,18 +43,32 @@ export async function POST(request: NextRequest) {
     const chatId = message.chat.id
     const messageText = message.text?.trim() || ''
 
-    // Get or create telegram user
-    const telegramUser = await prisma.telegramUser.findUnique({
+    // Get or create telegram user - allow new users to login
+    let telegramUser = await prisma.telegramUser.findUnique({
       where: { telegramId: chatId.toString() },
       include: { user: true }
     })
 
+    // If telegramUser doesn't exist, create a temporary one for new user login
     if (!telegramUser) {
-      return NextResponse.json({
-        method: 'sendMessage',
-        chat_id: chatId,
-        text: '❌ User tidak ditemukan. Silakan daftar terlebih dahulu di web app.\n\n💻 https://cash-gram-web-app.vercel.app'
-      })
+      // For new users, only allow /start and /login commands initially
+      if (messageText !== '/start' && !messageText.startsWith('/login') && !messageText.startsWith('/checkdb') && messageText !== '/mystatus') {
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: '👋 *SELAMAT DATANG!*\n\nAnda belum terdaftar di sistem Telegram.\n\n📱 *LOGIN:*\nKetik: `/login nomorhp password`\nContoh: `/login 085717797065 11111`\n\n🆕 *ATAU DAFTAR BARU:*\nKetik: `/start` untuk panduan\n\n� *DEBUG:*\nKetik: `/checkdb nomorhp` - cek data user',
+          parse_mode: 'Markdown'
+        })
+      }
+      
+      // Create temporary telegramUser for login process
+      telegramUser = {
+        id: 'temp',
+        telegramId: chatId.toString(),
+        userId: 'temp',
+        isActive: false,
+        user: null
+      } as any
     }
 
     // Check if user is logged out (inactive) - allow only specific commands
@@ -63,7 +77,7 @@ export async function POST(request: NextRequest) {
       messageText === cmd || messageText.startsWith(cmd + ' ')
     );
     
-    if (!telegramUser.isActive && !isCommandAllowed) {
+    if (telegramUser && !telegramUser.isActive && !isCommandAllowed) {
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
@@ -209,7 +223,7 @@ Mulai catat pengeluaran sekarang! 🚀`,
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
-        text: `🔍 *STATUS DEBUG*\n\n• ChatID: \`${chatId}\`\n• TelegramID: \`${telegramUser.telegramId}\`\n• UserID: \`${telegramUser.userId}\`\n• IsActive: \`${telegramUser.isActive}\`\n• User Name: \`${telegramUser.user?.name || 'N/A'}\`\n• User Phone: \`${telegramUser.user?.phone || 'N/A'}\``,
+        text: `🔍 *STATUS DEBUG*\n\n• ChatID: \`${chatId}\`\n• TelegramID: \`${telegramUser?.telegramId || 'N/A'}\`\n• UserID: \`${telegramUser?.userId || 'N/A'}\`\n• IsActive: \`${telegramUser?.isActive || false}\`\n• User Name: \`${telegramUser?.user?.name || 'N/A'}\`\n• User Phone: \`${telegramUser?.user?.phone || 'N/A'}\``,
         parse_mode: 'Markdown'
       })
     }

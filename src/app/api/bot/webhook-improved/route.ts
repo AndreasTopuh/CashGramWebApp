@@ -71,19 +71,21 @@ export async function POST(request: NextRequest) {
       } as any
     }
 
-    // Check if user is logged out (inactive) - allow only specific commands
-    const allowedCommandsWhenLoggedOut = ['/start', '/login', '/checkdb', '/mystatus', '/debuglogin'];
-    const isCommandAllowed = allowedCommandsWhenLoggedOut.some(cmd => 
-      messageText === cmd || messageText.startsWith(cmd + ' ')
-    );
-    
-    if (telegramUser && !telegramUser.isActive && !isCommandAllowed) {
-      return NextResponse.json({
-        method: 'sendMessage',
-        chat_id: chatId,
-        text: '🔐 *SILAKAN LOGIN TERLEBIH DAHULU*\n\nAnda sudah logout dari CashGram Bot.\n\n📱 *LOGIN:*\nKetik: `/login nomorhp password`\nContoh: `/login 081234567890 mypass`\n\n🔍 *DEBUG:*\nKetik: `/checkdb nomorhp` - cek data user\nKetik: `/mystatus` - cek status auth\n\n🆕 *ATAU DAFTAR BARU:*\nKetik: `/start` untuk panduan',
-        parse_mode: 'Markdown'
-      })
+    // Get user session (like old webhook - check for token)
+    if (!telegramUser || !telegramUser.isActive || !telegramUser.token) {
+      // Allow only certain commands when not authenticated
+      const allowedCommandsWhenNotAuthenticated = ['/start', '/login', '/checkdb', '/mystatus', '/debuglogin', '/reset'];
+      const isCommandAllowed = allowedCommandsWhenNotAuthenticated.some(cmd => 
+        messageText === cmd || messageText.startsWith(cmd + ' ')
+      );
+      
+      if (!isCommandAllowed) {
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: '❌ Anda belum login. Ketik /start untuk memulai.'
+        })
+      }
     }
 
     // Handle /start command
@@ -849,31 +851,36 @@ async function handleExportCommand(prisma: PrismaClient, chatId: number, telegra
   })
 }
 
-// Handle /logout command  
+// Handle /logout command (like old webhook)
 async function handleLogoutCommand(prisma: PrismaClient, chatId: number, telegramUser: any) {
   try {
+    // Deactivate user session and clear token (like old webhook)
     await prisma.telegramUser.update({
-      where: { id: telegramUser.id },
-      data: { isActive: false }
+      where: { telegramId: chatId.toString() },
+      data: {
+        isActive: false,
+        token: null,
+        updatedAt: new Date()
+      }
     })
 
     return NextResponse.json({
       method: 'sendMessage',
       chat_id: chatId,
-      text: '🔓 *LOGOUT BERHASIL*\n\n👋 Anda telah keluar dari CashGram Bot.\n\n💡 Untuk masuk kembali, ketik /start',
-      parse_mode: 'Markdown'
+      text: ` Anda telah logout dari CashGram Bot.
+
+Terima kasih telah menggunakan layanan kami!
+Ketik /start untuk login kembali.`
     })
   } catch (error) {
     console.error('Logout command error:', error)
     return NextResponse.json({
       method: 'sendMessage',
       chat_id: chatId,
-      text: '❌ Gagal logout.'
+      text: '❌ Terjadi kesalahan saat logout. Coba lagi nanti.'
     })
   }
-}
-
-// Handle /login command with phone and password
+}// Handle /login command with phone and password
 async function handleLoginCommand(prisma: PrismaClient, chatId: number, messageText: string, telegramUser: any) {
   try {
     // Parse /login command - expect format: /login phone password
@@ -944,65 +951,30 @@ async function handleLoginCommand(prisma: PrismaClient, chatId: number, messageT
   }
 }
 
-// Handle /reset command - delete all user data
+// Handle /reset command - delete telegram user mapping (like old webhook)
 async function handleResetCommand(prisma: PrismaClient, chatId: number, telegramUser: any) {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: telegramUser.userId }
-    })
-
-    if (!user) {
-      return NextResponse.json({
-        method: 'sendMessage',
-        chat_id: chatId,
-        text: '❌ User tidak ditemukan.\n\nℹ️ Ketik /info untuk bantuan'
-      })
-    }
-
-    // Delete all user data in order (foreign key constraints)
-    await prisma.expense.deleteMany({
-      where: { userId: telegramUser.userId }
+    // Delete any existing telegram user mapping for this telegram ID (like old webhook)
+    await prisma.telegramUser.deleteMany({
+      where: { telegramId: chatId.toString() }
     })
     
-    await prisma.category.deleteMany({
-      where: { userId: telegramUser.userId }
-    })
-    
-    await prisma.budgetAllocation.deleteMany({
-      where: { 
-        budgetPeriod: {
-          userId: telegramUser.userId
-        }
-      }
-    })
-
-    await prisma.budgetPeriod.deleteMany({
-      where: { userId: telegramUser.userId }
-    })
-
-    await prisma.savings.deleteMany({
-      where: { userId: telegramUser.userId }
-    })
-
-    // Deactivate telegram user but keep the link
-    await prisma.telegramUser.update({
-      where: { id: telegramUser.id },
-      data: { isActive: false }
-    })
-
     return NextResponse.json({
       method: 'sendMessage',
       chat_id: chatId,
-      text: '🗑️ *RESET BERHASIL*\n\n✅ Semua data berhasil dihapus:\n• Expenses\n• Categories\n• Budget\n\n💡 Untuk mulai lagi, ketik /start\n\nℹ️ Ketik /info untuk bantuan',
-      parse_mode: 'Markdown'
-    })
+      text: `� Reset berhasil! Data Telegram Anda sudah dihapus.
 
+Sekarang Anda bisa login ulang dengan:
+/login [nomor_hp] [password]
+
+Contoh: /login 085717797065 yourpassword`
+    })
   } catch (error) {
     console.error('Reset command error:', error)
     return NextResponse.json({
       method: 'sendMessage',
       chat_id: chatId,
-      text: '❌ Gagal reset data.\n\nℹ️ Ketik /info untuk bantuan'
+      text: '❌ Terjadi kesalahan saat reset. Coba lagi nanti.'
     })
   }
 }

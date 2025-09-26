@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user is logged out (inactive) - allow only specific commands
-    const allowedCommandsWhenLoggedOut = ['/start', '/login', '/checkdb', '/mystatus'];
+    const allowedCommandsWhenLoggedOut = ['/start', '/login', '/checkdb', '/mystatus', '/debuglogin'];
     const isCommandAllowed = allowedCommandsWhenLoggedOut.some(cmd => 
       messageText === cmd || messageText.startsWith(cmd + ' ')
     );
@@ -243,7 +243,7 @@ Mulai catat pengeluaran sekarang! 🚀`,
             method: 'sendMessage',
             chat_id: chatId,
             text: userExists 
-              ? `✅ *USER DITEMUKAN*\n\n• Phone: \`${userExists.phone}\`\n• Password: \`${userExists.password}\`\n• Name: \`${userExists.name}\`\n• ID: \`${userExists.id}\``
+              ? `✅ *USER DITEMUKAN*\n\n📱 Phone: \`${userExists.phone}\`\n🔑 Password: \`${userExists.password}\`\n👤 Name: \`${userExists.name || 'N/A'}\`\n🆔 ID: \`${userExists.id}\`\n\n💡 Gunakan: \`/login ${userExists.phone} ${userExists.password}\``
               : `❌ *USER TIDAK DITEMUKAN*\n\nPhone \`${phoneToCheck}\` tidak ada di database`,
             parse_mode: 'Markdown'
           })
@@ -258,7 +258,45 @@ Mulai catat pengeluaran sekarang! 🚀`,
         return NextResponse.json({
           method: 'sendMessage',
           chat_id: chatId,
-          text: 'Format: `/checkdb nomorhp`\nContoh: `/checkdb 085717797065`'
+          text: '📋 *FORMAT CHECKDB*\n\nGunakan: `/checkdb nomorhp`\nContoh: `/checkdb 085717797065`\n\n💡 Command ini menampilkan data user dan password yang benar'
+        })
+      }
+    }
+
+    // Handle /debuglogin command - test login without actually logging in
+    if (messageText.startsWith('/debuglogin')) {
+      const parts = messageText.trim().split(/\s+/)
+      if (parts.length === 3) {
+        const [_, phone, password] = parts
+        try {
+          // Check if user exists with this phone and password
+          const user = await prisma.user.findFirst({
+            where: { phone: phone, password: password }
+          })
+          
+          // Also check if user exists with phone only
+          const phoneOnlyUser = await prisma.user.findFirst({
+            where: { phone: phone }
+          })
+          
+          return NextResponse.json({
+            method: 'sendMessage',
+            chat_id: chatId,
+            text: `🔍 *DEBUG LOGIN*\n\n📱 Phone: \`${phone}\`\n🔑 Password: \`${password}\`\n\n**HASIL PENCARIAN:**\n${user ? '✅ User dengan phone + password DITEMUKAN' : '❌ User dengan phone + password TIDAK DITEMUKAN'}\n\n**PHONE ONLY:**\n${phoneOnlyUser ? `✅ Phone ditemukan\n🔑 Password di DB: \`${phoneOnlyUser.password}\`\n👤 Name: \`${phoneOnlyUser.name}\`\n🆔 ID: \`${phoneOnlyUser.id}\`` : '❌ Phone tidak ditemukan di database'}\n\n**KESIMPULAN:**\n${user ? '🎯 LOGIN SEHARUSNYA BERHASIL' : phoneOnlyUser ? '🚫 PASSWORD SALAH' : '🚫 PHONE TIDAK TERDAFTAR'}`,
+            parse_mode: 'Markdown'
+          })
+        } catch (error) {
+          return NextResponse.json({
+            method: 'sendMessage',
+            chat_id: chatId,
+            text: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+          })
+        }
+      } else {
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: '🔍 *DEBUG LOGIN*\n\nFormat: `/debuglogin nomorhp password`\nContoh: `/debuglogin 085717797065 mypass`\n\n💡 Command ini test login tanpa benar-benar login'
         })
       }
     }

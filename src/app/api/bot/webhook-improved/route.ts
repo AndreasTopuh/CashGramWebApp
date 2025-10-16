@@ -907,35 +907,70 @@ async function handleLoginCommand(prisma: PrismaClient, chatId: number, messageT
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
-        text: '📋 *FORMAT LOGIN*\n\nGunakan format:\n`/login nomorhp password`\n\nContoh:\n`/login 081234567890 mypassword`\n\nℹ️ Ketik /info untuk bantuan',
+        text: '📋 *FORMAT LOGIN*\n\nGunakan format:\n`/login nomorhp password`\n\nContoh:\n`/login 081234567890 mypassword`\nAtau: `/login +6281234567890 mypassword`\n\nℹ️ Ketik /info untuk bantuan',
         parse_mode: 'Markdown'
       })
     }
 
-    const [_, phone, password] = parts
+    const [_, phoneInput, password] = parts
     
-    // Find user by phone and password
-    const user = await prisma.user.findFirst({
-      where: {
-        phone: phone,
-        password: password // In production, this should be hashed
+    // Normalize phone number - try multiple formats
+    const phoneFormats = []
+    
+    // If starts with 0, convert to +62
+    if (phoneInput.startsWith('0')) {
+      phoneFormats.push(phoneInput) // Original: 085717797065
+      phoneFormats.push('+62' + phoneInput.substring(1)) // +6285717797065
+      phoneFormats.push('62' + phoneInput.substring(1)) // 6285717797065
+    } 
+    // If starts with +62, also try without + and with 0
+    else if (phoneInput.startsWith('+62')) {
+      phoneFormats.push(phoneInput) // Original: +6285717797065
+      phoneFormats.push(phoneInput.substring(1)) // 6285717797065
+      phoneFormats.push('0' + phoneInput.substring(3)) // 085717797065
+    }
+    // If starts with 62 (no +), also try with + and with 0
+    else if (phoneInput.startsWith('62')) {
+      phoneFormats.push(phoneInput) // Original: 6285717797065
+      phoneFormats.push('+' + phoneInput) // +6285717797065
+      phoneFormats.push('0' + phoneInput.substring(2)) // 085717797065
+    }
+    // Unknown format, just try as-is
+    else {
+      phoneFormats.push(phoneInput)
+    }
+    
+    console.log('[LOGIN] Trying phone formats:', phoneFormats)
+    
+    // Find user by trying all phone formats
+    let user = null
+    for (const phone of phoneFormats) {
+      user = await prisma.user.findFirst({
+        where: {
+          phone: phone,
+          password: password // In production, this should be hashed
+        }
+      })
+      if (user) {
+        console.log('[LOGIN] Found user with phone format:', phone)
+        break
       }
-    })
+    }
 
     if (!user) {
       // Add more detailed error logging
-      console.log('Login failed for:', { phone, chatId })
+      console.log('Login failed for:', { phoneInput, attemptedFormats: phoneFormats, chatId })
       
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
-        text: '❌ *LOGIN GAGAL*\n\nNomor HP atau password salah.\n\n🔍 *CEK KEMBALI:*\n• Nomor HP: `' + phone + '`\n• Password: (tersembunyi)\n\n💡 Daftar di: https://cash-gram-web-app.vercel.app',
+        text: '❌ *LOGIN GAGAL*\n\nNomor HP atau password salah.\n\n🔍 *CEK KEMBALI:*\n• Nomor HP: `' + phoneInput + '`\n• Password: (tersembunyi)\n\n💡 Gunakan format: `085...` atau `+6285...`\n💡 Daftar di: https://cash-gram-web-app.vercel.app\n\n🔧 Debug: `/checkdb ' + phoneInput + '`',
         parse_mode: 'Markdown'
       })
     }
 
     // Add success logging
-    console.log('Login successful for:', { phone, userId: user.id, chatId })
+    console.log('Login successful for:', { phoneInput, userId: user.id, chatId })
 
     // Update telegram user to link with the found user and activate
     await prisma.telegramUser.upsert({

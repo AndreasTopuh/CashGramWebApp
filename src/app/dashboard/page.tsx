@@ -421,6 +421,16 @@ export default function DashboardPage() {
     }
   }
 
+  const resetBudgetForm = () => {
+    setBudgetName('')
+    setTotalBudget('')
+    setBudgetStartDate('')
+    setBudgetEndDate('')
+    setBudgetAllocations({})
+    setSavingsBudget(false)
+    setShowBudgetForm(false)
+  }
+
   const handleCreateBudget = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!budgetName || !totalBudget || !budgetStartDate || !budgetEndDate) {
@@ -455,12 +465,7 @@ export default function DashboardPage() {
       })
 
       if (response.ok) {
-        setBudgetName('')
-        setTotalBudget('')
-        setBudgetStartDate('')
-        setBudgetEndDate('')
-        setBudgetAllocations({})
-        setShowBudgetForm(false)
+        resetBudgetForm()
         loadData(token!)
         alert('✅ Budget periode berhasil dibuat!')
       } else {
@@ -631,6 +636,21 @@ export default function DashboardPage() {
       day: 'numeric'
     })
   }
+
+  const totalBudgetValue = totalBudget ? parseFormattedNumber(totalBudget) || 0 : 0
+  const allocatedBudgetTotal = Object.values(budgetAllocations).reduce((sum, value) => {
+    if (!value) return sum
+    const parsed = parseFormattedNumber(value)
+    if (Number.isNaN(parsed)) {
+      return sum
+    }
+    return sum + parsed
+  }, 0)
+  const remainingBudgetValue = totalBudgetValue - allocatedBudgetTotal
+  const allocationProgress = totalBudgetValue > 0
+    ? Math.min((allocatedBudgetTotal / totalBudgetValue) * 100, 999)
+    : 0
+  const isOverAllocated = remainingBudgetValue < 0
 
   if (loading) {
     return (
@@ -1236,133 +1256,225 @@ export default function DashboardPage() {
 
         {/* Budget Form Modal */}
         {showBudgetForm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-3 sm:p-4 z-50">
-            <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 max-w-lg w-full mx-3 max-h-[90vh] overflow-y-auto">
-              <h3 className="text-lg sm:text-xl font-bold mb-4">Buat Periode Budget Baru</h3>
-              <form onSubmit={handleCreateBudget} className="space-y-4">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 z-50">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-auto max-h-[92vh] overflow-hidden flex flex-col">
+              <div className="flex items-start justify-between gap-4 px-5 sm:px-8 pt-6 pb-4 border-b border-gray-100">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nama Periode <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={budgetName}
-                    onChange={(e) => setBudgetName(e.target.value)}
-                    placeholder="contoh: November 2024"
-                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Total Budget <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={totalBudget}
-                    onChange={(e) => setTotalBudget(formatNumber(e.target.value))}
-                    placeholder="5,600,000"
-                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
-                    required
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Total uang bulanan yang diberikan orang tua
+                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500 mb-1">Budget Planner</p>
+                  <h3 className="text-xl sm:text-2xl font-bold text-gray-900">Buat Periode Budget Baru</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Isi detail periode di sebelah kiri dan atur alokasi setiap kategori di panel kanan.
                   </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={resetBudgetForm}
+                  className="text-gray-400 hover:text-gray-600 transition text-2xl leading-none"
+                  aria-label="Tutup form budget"
+                >
+                  ×
+                </button>
+              </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Tanggal Mulai <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      value={budgetStartDate}
-                      onChange={(e) => setBudgetStartDate(e.target.value)}
-                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Tanggal Berakhir <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      value={budgetEndDate}
-                      onChange={(e) => setBudgetEndDate(e.target.value)}
-                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
-                      required
-                    />
-                  </div>
-                </div>
+              <form onSubmit={handleCreateBudget} className="flex flex-col h-full">
+                <div className="flex-1 overflow-y-auto px-5 sm:px-8 py-6">
+                  <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+                    <section className="space-y-6">
+                      <div className="rounded-2xl border border-gray-200 bg-gray-50/80 p-4 sm:p-5">
+                        <h4 className="text-sm font-semibold text-gray-700 tracking-wide uppercase mb-3">Detail Periode</h4>
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Nama Periode <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={budgetName}
+                              onChange={(e) => setBudgetName(e.target.value)}
+                              placeholder="contoh: November 2024"
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
+                              required
+                            />
+                          </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Alokasi Budget per Kategori
-                  </label>
-                  <p className="text-xs text-gray-500 mb-3">
-                    Atur berapa budget untuk setiap kategori pengeluaran (opsional)
-                  </p>
-                  <div className="space-y-3 max-h-60 overflow-y-auto">
-                    {categories.map((category) => (
-                      <div key={category.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                        <span className="text-lg">{category.icon}</span>
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900">{category.name}</p>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Total Budget <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={totalBudget}
+                              onChange={(e) => setTotalBudget(formatNumber(e.target.value))}
+                              placeholder="5,600,000"
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-right font-medium text-black text-sm"
+                              required
+                            />
+                            <p className="text-xs text-gray-500 mt-2">
+                              Total dana untuk periode ini. Kamu bisa membaginya ke kategori atau membiarkannya fleksibel.
+                            </p>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Rentang Tanggal <span className="text-red-500">*</span>
+                            </label>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <input
+                                type="date"
+                                value={budgetStartDate}
+                                onChange={(e) => setBudgetStartDate(e.target.value)}
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
+                                required
+                              />
+                              <input
+                                type="date"
+                                value={budgetEndDate}
+                                onChange={(e) => setBudgetEndDate(e.target.value)}
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
+                                required
+                              />
+                            </div>
+                            <p className="text-xs text-gray-500 mt-2">Pastikan periode tidak saling bertumpuk dengan budget yang sudah ada.</p>
+                          </div>
                         </div>
-                        <input
-                          type="text"
-                          value={budgetAllocations[category.id] || ''}
-                          onChange={(e) => handleBudgetAllocationChange(category.id, e.target.value)}
-                          placeholder="0"
-                          className="w-24 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-black text-sm"
-                        />
+                      </div>
+
+                      <div className="rounded-2xl border border-purple-100 bg-gradient-to-br from-purple-50 via-transparent to-white p-4 sm:p-5">
+                        <h4 className="text-sm font-semibold text-purple-700 uppercase tracking-wide mb-3">Ringkasan Alokasi</h4>
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="rounded-xl border border-white/60 bg-white/80 px-4 py-3">
+                              <p className="text-xs text-gray-500 uppercase tracking-wide">Total Budget</p>
+                              <p className="text-lg font-semibold text-gray-900">{formatCurrency(totalBudgetValue || 0)}</p>
+                            </div>
+                            <div className="rounded-xl border border-white/60 bg-white/80 px-4 py-3">
+                              <p className="text-xs text-gray-500 uppercase tracking-wide">Dialokasikan</p>
+                              <p className="text-lg font-semibold text-gray-900">{formatCurrency(allocatedBudgetTotal)}</p>
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-white/60 bg-white/80 px-4 py-3">
+                            <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide mb-2">
+                              <span className={isOverAllocated ? 'text-red-500' : 'text-green-600'}>
+                                {isOverAllocated ? 'Kelebihan Alokasi' : 'Sisa Budget'}
+                              </span>
+                              <span className={`text-sm font-semibold ${isOverAllocated ? 'text-red-500' : 'text-gray-900'}`}>
+                                {formatCurrency(Math.abs(remainingBudgetValue))}
+                              </span>
+                            </div>
+                            <div className="h-2 rounded-full bg-purple-100 overflow-hidden">
+                              <div
+                                className={`h-2 rounded-full transition-all duration-300 ${isOverAllocated ? 'bg-red-400' : 'bg-purple-500'}`}
+                                style={{ width: `${Math.min(Math.max(allocationProgress, 0), 100)}%` }}
+                              ></div>
+                            </div>
+                          </div>
+
+                          <p className="text-xs text-gray-500 leading-relaxed">
+                            Tips: Tidak harus mengalokasikan semua kategori. Kategori kosong otomatis menggunakan budget fleksibel.
+                          </p>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="space-y-4 lg:space-y-5 rounded-2xl border border-gray-200 bg-white/90 p-4 sm:p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Alokasi per Kategori</h4>
+                          <p className="text-xs text-gray-500 mt-1">Atur nominal untuk kategori yang ingin kamu kontrol lebih ketat.</p>
+                        </div>
                         <button
                           type="button"
-                          onClick={() => handleDeleteCategory(category.id, category.name)}
-                          className="p-1 text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                          title="Hapus kategori"
+                          onClick={() => setShowCategoryForm(true)}
+                          className="text-xs font-semibold text-purple-600 hover:text-purple-700"
                         >
-                          <Trash2 size={16} />
+                          + Kategori Baru
                         </button>
                       </div>
-                    ))}
-                  </div>
-                  <div className="flex justify-between items-center mt-3">
-                    <p className="text-xs text-gray-500">
-                      Kategori yang tidak diisi akan menggunakan alokasi fleksibel
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setShowCategoryForm(true)}
-                      className="text-xs text-purple-600 hover:text-purple-700 font-medium"
-                    >
-                      + Buat Kategori Baru
-                    </button>
+
+                      <div className="space-y-3 max-h-[40vh] lg:max-h-[46vh] overflow-y-auto pr-1">
+                        {categories.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/60 p-6 text-center text-sm text-gray-500">
+                            Belum ada kategori. Tambahkan kategori baru terlebih dahulu.
+                          </div>
+                        ) : (
+                          categories.map((category) => {
+                            const allocationValue = budgetAllocations[category.id]
+                            const parsedAllocation = allocationValue ? parseFormattedNumber(allocationValue) : 0
+                            const percentOfTotal = totalBudgetValue > 0 && parsedAllocation > 0
+                              ? Math.min((parsedAllocation / totalBudgetValue) * 100, 999)
+                              : 0
+
+                            return (
+                              <div
+                                key={category.id}
+                                className="rounded-xl border border-gray-200 bg-white shadow-sm px-4 py-3"
+                              >
+                                <div className="flex flex-wrap items-center gap-3">
+                                  <span className="text-xl">{category.icon}</span>
+                                  <div className="min-w-[160px] flex-1">
+                                    <p className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                                      {category.name}
+                                      {percentOfTotal > 0 && (
+                                        <span className="text-[10px] font-semibold text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">
+                                          {percentOfTotal.toFixed(0)}%
+                                        </span>
+                                      )}
+                                    </p>
+                                    <p className="text-xs text-gray-400">Opsional • isi jika ingin dibatasi</p>
+                                    {percentOfTotal > 0 && (
+                                      <div className="mt-2 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                                        <div
+                                          className="h-1.5 rounded-full bg-purple-500 transition-all"
+                                          style={{ width: `${Math.min(percentOfTotal, 100)}%` }}
+                                        ></div>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      value={allocationValue || ''}
+                                      onChange={(e) => handleBudgetAllocationChange(category.id, e.target.value)}
+                                      placeholder="0"
+                                      className="w-28 sm:w-32 lg:w-36 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-right font-medium text-sm text-black"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteCategory(category.id, category.name)}
+                                      className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                                      title="Hapus kategori"
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+
+                      <p className="text-xs text-gray-500">
+                        Kategori yang tidak diisi akan otomatis menggunakan alokasi fleksibel dari total budget.
+                      </p>
+                    </section>
                   </div>
                 </div>
 
-                <div className="flex gap-3">
+                <div className="px-5 sm:px-8 pb-6 border-t border-gray-100 pt-5 flex flex-col sm:flex-row gap-3">
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowBudgetForm(false)
-                      setBudgetName('')
-                      setTotalBudget('')
-                      setBudgetStartDate('')
-                      setBudgetEndDate('')
-                      setBudgetAllocations({})
-                    }}
-                    className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm"
+                    onClick={resetBudgetForm}
+                    className="sm:flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
                     disabled={savingsBudget}
-                    className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                    className="sm:flex-1 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
                   >
                     {savingsBudget ? 'Membuat...' : 'Buat Budget'}
                   </button>

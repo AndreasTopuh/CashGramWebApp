@@ -1129,7 +1129,7 @@ export default function DashboardPage() {
 
         {/* Add Expense Form Modal */}
         {showAddForm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-6 py-6 overflow-y-auto">
+          <div className="fixed inset-0 z-50 flex items-start justify-center px-3 sm:px-6 py-6 sm:py-8 overflow-y-auto">
             <div
               className="absolute inset-0 bg-black/60 backdrop-blur-sm"
               onClick={() => !saving && setShowAddForm(false)}
@@ -1385,7 +1385,7 @@ export default function DashboardPage() {
 
         {/* Budget Form Modal */}
         {showBudgetForm && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 z-50 overflow-y-auto">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center p-3 sm:p-6 z-50 overflow-y-auto">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-auto max-h-[92vh] overflow-hidden flex flex-col my-6 sm:my-10">
               <div className="flex items-start justify-between gap-4 px-5 sm:px-8 pt-6 pb-4 border-b border-gray-100">
                 <div>

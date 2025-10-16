@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get or create telegram user - allow new users to login
-    let telegramUser = await prisma.telegramUser.findUnique({
+    const telegramUser = await prisma.telegramUser.findUnique({
       where: { telegramId: chatId.toString() },
       include: { user: true }
     })

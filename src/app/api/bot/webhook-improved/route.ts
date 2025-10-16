@@ -43,64 +43,92 @@ export async function POST(request: NextRequest) {
     const chatId = message.chat.id
     const messageText = message.text?.trim() || ''
 
+    // Handle /login first (before checking authentication)
+    if (messageText.startsWith('/login')) {
+      return await handleLoginCommand(prisma, chatId, messageText)
+    }
+
+    // Handle /reset command (before checking authentication)
+    if (messageText === '/reset') {
+      return await handleResetCommand(prisma, chatId)
+    }
+
+    // Handle /checkdb and /mystatus (debug commands - no auth required)
+    if (messageText.startsWith('/checkdb')) {
+      const parts = messageText.trim().split(' ')
+      if (parts.length === 2) {
+        const phoneToCheck = parts[1]
+        try {
+          const userExists = await prisma.user.findFirst({
+            where: { phone: phoneToCheck },
+            select: { phone: true, password: true, name: true, id: true }
+          })
+          
+          return NextResponse.json({
+            method: 'sendMessage',
+            chat_id: chatId,
+            text: userExists 
+              ? `✅ *USER DITEMUKAN*\n\n📱 Phone: \`${userExists.phone}\`\n🔑 Password: \`${userExists.password}\`\n👤 Name: \`${userExists.name || 'N/A'}\`\n🆔 ID: \`${userExists.id}\`\n\n💡 Gunakan: \`/login ${userExists.phone} ${userExists.password}\``
+              : `❌ *USER TIDAK DITEMUKAN*\n\nPhone \`${phoneToCheck}\` tidak ada di database`,
+            parse_mode: 'Markdown'
+          })
+        } catch (error) {
+          return NextResponse.json({
+            method: 'sendMessage',
+            chat_id: chatId,
+            text: `❌ Error checking database: ${error instanceof Error ? error.message : 'Unknown error'}`
+          })
+        }
+      } else {
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: '📋 *FORMAT CHECKDB*\n\nGunakan: `/checkdb nomorhp`\nContoh: `/checkdb 085717797065`\n\n💡 Command ini menampilkan data user dan password yang benar',
+          parse_mode: 'Markdown'
+        })
+      }
+    }
+
     // Get or create telegram user - allow new users to login
     let telegramUser = await prisma.telegramUser.findUnique({
       where: { telegramId: chatId.toString() },
       include: { user: true }
     })
 
-    // If telegramUser doesn't exist, create a temporary one for new user login
-    if (!telegramUser) {
-      // For new users, only allow /start and /login commands initially
-      if (messageText !== '/start' && !messageText.startsWith('/login') && !messageText.startsWith('/checkdb') && messageText !== '/mystatus') {
-        return NextResponse.json({
-          method: 'sendMessage',
-          chat_id: chatId,
-          text: '👋 *SELAMAT DATANG!*\n\nAnda belum terdaftar di sistem Telegram.\n\n📱 *LOGIN:*\nKetik: `/login nomorhp password`\nContoh: `/login 085717797065 11111`\n\n🆕 *ATAU DAFTAR BARU:*\nKetik: `/start` untuk panduan\n\n� *DEBUG:*\nKetik: `/checkdb nomorhp` - cek data user',
-          parse_mode: 'Markdown'
-        })
-      }
-      
-      // Create temporary telegramUser for login process
-      telegramUser = {
-        id: 'temp',
-        telegramId: chatId.toString(),
-        userId: 'temp',
-        isActive: false,
-        user: null
-      } as any
-    }
+    // Debug logging
+    console.log('[DEBUG] TelegramUser loaded:', {
+      exists: !!telegramUser,
+      isActive: telegramUser?.isActive,
+      userId: telegramUser?.userId,
+      messageText
+    })
 
-    // Get user session (like old webhook - check for token)
-    if (!telegramUser || !telegramUser.isActive || !telegramUser.token) {
-      // Allow only certain commands when not authenticated
-      const allowedCommandsWhenNotAuthenticated = ['/start', '/login', '/checkdb', '/mystatus', '/debuglogin', '/reset'];
-      const isCommandAllowed = allowedCommandsWhenNotAuthenticated.some(cmd => 
-        messageText === cmd || messageText.startsWith(cmd + ' ')
-      );
-      
-      if (!isCommandAllowed) {
-        return NextResponse.json({
-          method: 'sendMessage',
-          chat_id: chatId,
-          text: '❌ Anda belum login. Ketik /start untuk memulai.'
-        })
-      }
-    }
-
-    // Handle /start command
-    if (messageText === '/start') {
-      // Check if user is logged out (exists but inactive)
-      const existingTelegramUser = await prisma.telegramUser.findUnique({
-        where: { telegramId: chatId.toString() }
+    // Handle /mystatus - show current user state
+    if (messageText === '/mystatus') {
+      return NextResponse.json({
+        method: 'sendMessage',
+        chat_id: chatId,
+        text: `🔍 *STATUS DEBUG*\n\n• ChatID: \`${chatId}\`\n• TelegramID: \`${telegramUser?.telegramId || 'N/A'}\`\n• UserID: \`${telegramUser?.userId || 'N/A'}\`\n• IsActive: \`${telegramUser?.isActive || false}\`\n• User Name: \`${telegramUser?.user?.name || 'N/A'}\`\n• User Phone: \`${telegramUser?.user?.phone || 'N/A'}\``,
+        parse_mode: 'Markdown'
       })
+    }
 
-      if (existingTelegramUser && !existingTelegramUser.isActive) {
-        // User exists but is logged out - ask for login
-        return NextResponse.json({
-          method: 'sendMessage',
-          chat_id: chatId,
-          text: `👋 *SELAMAT DATANG KEMBALI!*
+    // Check if user is authenticated
+    console.log('[DEBUG] Auth check:', { 
+      hasUser: !!telegramUser,
+      isActive: telegramUser?.isActive,
+      willBlock: !telegramUser || !telegramUser.isActive
+    })
+
+    if (!telegramUser || !telegramUser.isActive) {
+      // Only allow /start for unauthenticated users
+      if (messageText === '/start') {
+        // Check if user exists but is logged out
+        if (telegramUser && !telegramUser.isActive) {
+          return NextResponse.json({
+            method: 'sendMessage',
+            chat_id: chatId,
+            text: `👋 *SELAMAT DATANG KEMBALI!*
 
 🔐 Anda sudah logout sebelumnya. Pilih cara masuk:
 
@@ -113,14 +141,15 @@ Contoh: \`/login 081234567890 mypass\`
 📝 Daftar akun baru, lalu login di atas
 
 ℹ️ Ketik /info untuk bantuan`,
-          parse_mode: 'Markdown'
-        })
-      }
+            parse_mode: 'Markdown'
+          })
+        }
 
-      return NextResponse.json({
-        method: 'sendMessage',
-        chat_id: chatId,
-        text: `🎉 *Selamat datang di CashGram Bot!*
+        // New user
+        return NextResponse.json({
+          method: 'sendMessage',
+          chat_id: chatId,
+          text: `🎉 *Selamat datang di CashGram Bot!*
 
 💻 *DASHBOARD WEBSITE:*
 🌐 https://cash-gram-web-app.vercel.app
@@ -141,13 +170,22 @@ Contoh: \`/login 081234567890 mypass\`
 💰 /saldo - Total pengeluaran hari ini
 🏦 /budget - Status budget saat ini
 💰 /tabungan - Total tabungan
-� /login [nohp] [password] - Login ke akun
+🔐 /login [nohp] [password] - Login ke akun
 🔓 /logout - Keluar dari bot
 🔄 /reset - Hapus semua data user
 📤 /export - Export data
 ℹ️ /info - Panduan lengkap
 
 Mulai catat pengeluaran sekarang! 🚀`,
+          parse_mode: 'Markdown'
+        })
+      }
+
+      // User is not authenticated
+      return NextResponse.json({
+        method: 'sendMessage',
+        chat_id: chatId,
+        text: '👋 *SELAMAT DATANG!*\n\nAnda belum terdaftar di sistem Telegram.\n\n📱 *LOGIN:*\nKetik: `/login nomorhp password`\nContoh: `/login 085717797065 11111`\n\n🆕 *ATAU DAFTAR BARU:*\nKetik: `/start` untuk panduan\n\n🔍 *DEBUG:*\nKetik: `/checkdb nomorhp` - cek data user',
         parse_mode: 'Markdown'
       })
     }
@@ -210,24 +248,9 @@ Mulai catat pengeluaran sekarang! 🚀`,
       return await handleExportCommand(prisma, chatId, telegramUser)
     }
 
-    // Handle /login command
-    if (messageText.startsWith('/login')) {
-      return await handleLoginCommand(prisma, chatId, messageText, telegramUser)
-    }
-
     // Handle /logout command
     if (messageText === '/logout') {
       return await handleLogoutCommand(prisma, chatId, telegramUser)
-    }
-
-    // Handle /mystatus command - for debugging authentication
-    if (messageText === '/mystatus') {
-      return NextResponse.json({
-        method: 'sendMessage',
-        chat_id: chatId,
-        text: `🔍 *STATUS DEBUG*\n\n• ChatID: \`${chatId}\`\n• TelegramID: \`${telegramUser?.telegramId || 'N/A'}\`\n• UserID: \`${telegramUser?.userId || 'N/A'}\`\n• IsActive: \`${telegramUser?.isActive || false}\`\n• User Name: \`${telegramUser?.user?.name || 'N/A'}\`\n• User Phone: \`${telegramUser?.user?.phone || 'N/A'}\``,
-        parse_mode: 'Markdown'
-      })
     }
 
     // Handle /checkdb command - check if user data exists
@@ -301,11 +324,6 @@ Mulai catat pengeluaran sekarang! 🚀`,
           text: '🔍 *DEBUG LOGIN*\n\nFormat: `/debuglogin nomorhp password`\nContoh: `/debuglogin 085717797065 mypass`\n\n💡 Command ini test login tanpa benar-benar login'
         })
       }
-    }
-
-    // Handle /reset command
-    if (messageText === '/reset') {
-      return await handleResetCommand(prisma, chatId, telegramUser)
     }
 
     // Handle confirmation messages (lanjut/batal)
@@ -851,15 +869,14 @@ async function handleExportCommand(prisma: PrismaClient, chatId: number, telegra
   })
 }
 
-// Handle /logout command (like old webhook)
+// Handle /logout command
 async function handleLogoutCommand(prisma: PrismaClient, chatId: number, telegramUser: any) {
   try {
-    // Deactivate user session and clear token (like old webhook)
+    // Deactivate user session (no token in new flow)
     await prisma.telegramUser.update({
       where: { telegramId: chatId.toString() },
       data: {
         isActive: false,
-        token: null,
         updatedAt: new Date()
       }
     })
@@ -867,7 +884,7 @@ async function handleLogoutCommand(prisma: PrismaClient, chatId: number, telegra
     return NextResponse.json({
       method: 'sendMessage',
       chat_id: chatId,
-      text: ` Anda telah logout dari CashGram Bot.
+      text: `👋 Anda telah logout dari CashGram Bot.
 
 Terima kasih telah menggunakan layanan kami!
 Ketik /start untuk login kembali.`
@@ -881,7 +898,7 @@ Ketik /start untuk login kembali.`
     })
   }
 }// Handle /login command with phone and password
-async function handleLoginCommand(prisma: PrismaClient, chatId: number, messageText: string, telegramUser: any) {
+async function handleLoginCommand(prisma: PrismaClient, chatId: number, messageText: string) {
   try {
     // Parse /login command - expect format: /login phone password
     const parts = messageText.trim().split(' ')
@@ -890,7 +907,7 @@ async function handleLoginCommand(prisma: PrismaClient, chatId: number, messageT
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
-        text: '� *FORMAT LOGIN*\n\nGunakan format:\n`/login nomorhp password`\n\nContoh:\n`/login 081234567890 mypassword`\n\nℹ️ Ketik /info untuk bantuan',
+        text: '📋 *FORMAT LOGIN*\n\nGunakan format:\n`/login nomorhp password`\n\nContoh:\n`/login 081234567890 mypassword`\n\nℹ️ Ketik /info untuk bantuan',
         parse_mode: 'Markdown'
       })
     }
@@ -912,7 +929,7 @@ async function handleLoginCommand(prisma: PrismaClient, chatId: number, messageT
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
-        text: '❌ *LOGIN GAGAL*\n\nNomor HP atau password salah.\n\n� *CEK KEMBALI:*\n• Nomor HP: `' + phone + '`\n• Password: (tersembunyi)\n\n💡 Daftar di: https://cash-gram-web-app.vercel.app',
+        text: '❌ *LOGIN GAGAL*\n\nNomor HP atau password salah.\n\n🔍 *CEK KEMBALI:*\n• Nomor HP: `' + phone + '`\n• Password: (tersembunyi)\n\n💡 Daftar di: https://cash-gram-web-app.vercel.app',
         parse_mode: 'Markdown'
       })
     }
@@ -951,10 +968,10 @@ async function handleLoginCommand(prisma: PrismaClient, chatId: number, messageT
   }
 }
 
-// Handle /reset command - delete telegram user mapping (like old webhook)
-async function handleResetCommand(prisma: PrismaClient, chatId: number, telegramUser: any) {
+// Handle /reset command - delete telegram user mapping
+async function handleResetCommand(prisma: PrismaClient, chatId: number) {
   try {
-    // Delete any existing telegram user mapping for this telegram ID (like old webhook)
+    // Delete any existing telegram user mapping for this telegram ID
     await prisma.telegramUser.deleteMany({
       where: { telegramId: chatId.toString() }
     })
@@ -962,7 +979,7 @@ async function handleResetCommand(prisma: PrismaClient, chatId: number, telegram
     return NextResponse.json({
       method: 'sendMessage',
       chat_id: chatId,
-      text: `� Reset berhasil! Data Telegram Anda sudah dihapus.
+      text: `🔄 Reset berhasil! Data Telegram Anda sudah dihapus.
 
 Sekarang Anda bisa login ulang dengan:
 /login [nomor_hp] [password]

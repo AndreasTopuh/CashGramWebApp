@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PrismaClient } from '@prisma/client'
 import { GeminiService } from '@/lib/gemini'
+import bcrypt from 'bcrypt'
 
 // Store temporary expense data (in production, use Redis)
 const tempExpenseData = new Map()
@@ -942,14 +943,11 @@ async function handleLoginCommand(prisma: PrismaClient, chatId: number, messageT
     
     console.log('[LOGIN] Trying phone formats:', phoneFormats)
     
-    // Find user by trying all phone formats
+    // Find user by phone first (try all formats)
     let user = null
     for (const phone of phoneFormats) {
       user = await prisma.user.findFirst({
-        where: {
-          phone: phone,
-          password: password // In production, this should be hashed
-        }
+        where: { phone: phone }
       })
       if (user) {
         console.log('[LOGIN] Found user with phone format:', phone)
@@ -958,13 +956,43 @@ async function handleLoginCommand(prisma: PrismaClient, chatId: number, messageT
     }
 
     if (!user) {
-      // Add more detailed error logging
-      console.log('Login failed for:', { phoneInput, attemptedFormats: phoneFormats, chatId })
+      // User not found
+      console.log('Login failed - user not found:', { phoneInput, attemptedFormats: phoneFormats, chatId })
       
       return NextResponse.json({
         method: 'sendMessage',
         chat_id: chatId,
-        text: '❌ *LOGIN GAGAL*\n\nNomor HP atau password salah.\n\n🔍 *CEK KEMBALI:*\n• Nomor HP: `' + phoneInput + '`\n• Password: (tersembunyi)\n\n💡 Gunakan format: `085...` atau `+6285...`\n💡 Daftar di: https://cash-gram-web-app.vercel.app\n\n🔧 Debug: `/checkdb ' + phoneInput + '`',
+        text: '❌ *LOGIN GAGAL*\n\nNomor HP tidak terdaftar.\n\n🔍 *CEK KEMBALI:*\n• Nomor HP: `' + phoneInput + '`\n\n💡 Gunakan format: `085...` atau `+6285...`\n💡 Daftar di: https://cash-gram-web-app.vercel.app\n\n🔧 Debug: `/checkdb ' + phoneInput + '`',
+        parse_mode: 'Markdown'
+      })
+    }
+
+    // Verify password with bcrypt
+    let isPasswordValid = false
+    try {
+      // Check if password is hashed (starts with $2b$ for bcrypt)
+      if (user.password.startsWith('$2b$') || user.password.startsWith('$2a$')) {
+        // Password is hashed, use bcrypt compare
+        isPasswordValid = await bcrypt.compare(password, user.password)
+        console.log('[LOGIN] Using bcrypt verification:', isPasswordValid)
+      } else {
+        // Password is plaintext (legacy/testing), direct compare
+        isPasswordValid = password === user.password
+        console.log('[LOGIN] Using plaintext verification:', isPasswordValid)
+      }
+    } catch (error) {
+      console.error('[LOGIN] Password verification error:', error)
+      isPasswordValid = false
+    }
+
+    if (!isPasswordValid) {
+      // Wrong password
+      console.log('Login failed - wrong password:', { phoneInput, userId: user.id, chatId })
+      
+      return NextResponse.json({
+        method: 'sendMessage',
+        chat_id: chatId,
+        text: '❌ *LOGIN GAGAL*\n\nPassword salah.\n\n🔍 *CEK KEMBALI:*\n• Nomor HP: `' + phoneInput + '`\n• Password: (tersembunyi)\n\n💡 Pastikan password yang Anda masukkan benar\n💡 Lupa password? Reset di: https://cash-gram-web-app.vercel.app',
         parse_mode: 'Markdown'
       })
     }
